@@ -81,12 +81,15 @@ export const useStore = create<AppState>()((set, get) => ({
                 category: listData.category,
                 list_budget: listData.listBudget,
                 user_id: session.user.id,
+                status: 'active',
+                is_pinned: false,
             })
             .select()
             .single();
 
-        if (error) console.error("Error adding list:", error);
-        else {
+        if (error) {
+            console.error("Error adding list:", error);
+        } else {
             const newList = mapListFromDb(data);
             set((state) => ({ lists: [...state.lists, newList] }));
             get().setCurrentPage('listDetail', newList.id);
