@@ -1,19 +1,16 @@
 import { create } from 'zustand';
-import { AppState, ShoppingList, ListItem, Budget, PriceHistoryEntry } from '../types';
+import { AppState, ShoppingList, ListItem, PriceHistoryEntry, RawPurchaseHistoryItem } from '../types';
 import { supabase } from '../lib/supabase';
-import { Session } from '@supabase/supabase-js';
 
 // Helper to map DB snake_case to JS camelCase
 const mapListFromDb = (dbList: any): ShoppingList => ({
   id: dbList.id,
   createdAt: dbList.created_at,
-  status: dbList.status,
   items: dbList.list_items?.map(mapItemFromDb) || [],
-  isPinned: dbList.is_pinned,
   name: dbList.name,
-  category: dbList.category,
-  listBudget: dbList.list_budget,
+  listBudget: dbList.budget,
   user_id: dbList.user_id,
+  category: dbList.category,
 });
 
 const mapItemFromDb = (dbItem: any): ListItem => ({
@@ -23,14 +20,13 @@ const mapItemFromDb = (dbItem: any): ListItem => ({
     unitPrice: dbItem.unit_price,
     category: dbItem.category,
     isPurchased: dbItem.is_purchased,
-    order: dbItem.item_order,
     list_id: dbItem.list_id,
     user_id: dbItem.user_id,
-    created_at: dbItem.created_at,
+    created_at: dbItem.added_at,
 });
 
 
-export const useStore = create<AppState>()((set, get) => ({
+export const useStore = create<AppState>((set, get) => ({
       // STATE
       loadingStates: {},
       error: null,
@@ -42,6 +38,7 @@ export const useStore = create<AppState>()((set, get) => ({
       lists: [],
       budgets: [],
       priceHistory: [],
+      rawPurchaseHistory: [],
 
       // ACTIONS
       setLoadingState: (key, isLoading) => set(state => ({ loadingStates: { ...state.loadingStates, [key]: isLoading } })),
@@ -53,7 +50,7 @@ export const useStore = create<AppState>()((set, get) => ({
         get().setLoadingState('signOut', true);
         try {
             await supabase.auth.signOut();
-            set({ session: null, lists: [], budgets: [], priceHistory: [], currentPage: 'myLists', currentListId: null });
+            set({ session: null, lists: [], budgets: [], priceHistory: [], rawPurchaseHistory: [], currentPage: 'myLists', currentListId: null });
         } catch (error) {
             console.error("Error signing out", error);
             get().setError("Não foi possível sair. Tente novamente.");
@@ -68,31 +65,29 @@ export const useStore = create<AppState>()((set, get) => ({
         
         try {
             const { data: listsData, error: listsError } = await supabase
-              .from('list')
+              .from('shopping_lists')
               .select('*, list_items(*)')
               .eq('user_id', session.user.id);
             if (listsError) throw listsError;
             set({ lists: listsData.map(mapListFromDb) });
 
-            const { data: budgetsData, error: budgetsError } = await supabase
-              .from('budgets')
-              .select('*')
-              .eq('user_id', session.user.id);
-            if (budgetsError) throw budgetsError;
-            set({ budgets: budgetsData });
+            // The 'budgets' table does not exist in the provided schema.
+            set({ budgets: [] });
 
             const { data: historyData, error: historyError } = await supabase
-              .from('price_history')
+              .from('purchase_history')
               .select('*')
               .eq('user_id', session.user.id);
             if (historyError) throw historyError;
             
+            set({ rawPurchaseHistory: historyData as RawPurchaseHistoryItem[] });
+
             const groupedHistory = historyData.reduce((acc, curr) => {
                 const itemName = curr.item_name;
                 if (!acc[itemName]) {
                     acc[itemName] = { id: curr.id, user_id: curr.user_id, itemName: itemName, prices: [] };
                 }
-                acc[itemName].prices.push({ date: curr.date, price: curr.price });
+                acc[itemName].prices.push({ date: curr.purchased_at, price: curr.total_price });
                 return acc;
             }, {} as Record<string, PriceHistoryEntry>);
             set({ priceHistory: Object.values(groupedHistory) });
@@ -108,52 +103,10 @@ export const useStore = create<AppState>()((set, get) => ({
       setTheme: (theme) => set({ theme }),
 
       setMonthlyBudget: async (amount, date) => {
-        const key = 'setMonthlyBudget';
-        get().setLoadingState(key, true);
-        try {
-            const { session } = get();
-            if (!session) throw new Error("User not authenticated");
-            const year = date.getFullYear();
-            const month = date.getMonth();
-
-            const { data: existingBudget } = await supabase
-                .from('budgets')
-                .select('id')
-                .eq('user_id', session.user.id)
-                .eq('year', year)
-                .eq('month', month)
-                .single();
-
-            const budgetRecord = { user_id: session.user.id, year, month, amount };
-            let updatedBudget: Budget | null = null;
-            
-            if(existingBudget) {
-                const { data, error } = await supabase.from('budgets').update({ amount }).eq('id', existingBudget.id).select().single();
-                if(error) throw error;
-                updatedBudget = data;
-            } else {
-                const { data, error } = await supabase.from('budgets').insert(budgetRecord).select().single();
-                if(error) throw error;
-                updatedBudget = data;
-            }
-
-            if(updatedBudget) {
-                set(state => {
-                    const existingIndex = state.budgets.findIndex(b => b.year === year && b.month === month);
-                    if (existingIndex > -1) {
-                        const newBudgets = [...state.budgets];
-                        newBudgets[existingIndex] = updatedBudget;
-                        return { budgets: newBudgets };
-                    }
-                    return { budgets: [...state.budgets, updatedBudget] };
-                });
-            }
-        } catch (error) {
-            console.error("Error setting monthly budget", error);
-            get().setError("Falha ao salvar o orçamento.");
-        } finally {
-            get().setLoadingState(key, false);
-        }
+        // This feature is not supported by the provided database schema,
+        // as there is no 'budgets' table.
+        console.warn("setMonthlyBudget is not supported by the current database schema.");
+        return Promise.resolve();
       },
 
       addList: async (listData) => {
@@ -163,8 +116,13 @@ export const useStore = create<AppState>()((set, get) => ({
             const { session } = get();
             if (!session) throw new Error("User not authenticated");
             const { data, error } = await supabase
-                .from('list')
-                .insert({ name: listData.name, category: listData.category, list_budget: listData.listBudget, user_id: session.user.id, status: 'active', is_pinned: false })
+                .from('shopping_lists')
+                .insert({ 
+                    name: listData.name, 
+                    budget: listData.listBudget, 
+                    user_id: session.user.id,
+                    category: listData.category,
+                })
                 .select()
                 .single();
             if (error) throw error;
@@ -186,22 +144,34 @@ export const useStore = create<AppState>()((set, get) => ({
         try {
             const dbUpdates: Record<string, any> = {};
             if (updates.name) dbUpdates.name = updates.name;
+            if (typeof updates.listBudget === 'number') dbUpdates.budget = updates.listBudget;
             if (updates.category) dbUpdates.category = updates.category;
-            if (updates.status) dbUpdates.status = updates.status;
-            if (typeof updates.isPinned === 'boolean') dbUpdates.is_pinned = updates.isPinned;
-            if (typeof updates.listBudget === 'number') dbUpdates.list_budget = updates.listBudget;
             
-            const { error } = await supabase.from('list').update(dbUpdates).eq('id', listId);
+            const { error } = await supabase.from('shopping_lists').update(dbUpdates).eq('id', listId);
             if (error) throw error;
 
             set((state) => ({ lists: state.lists.map(list => list.id === listId ? { ...list, ...updates } : list) }));
-            if (updates.status === 'completed') {
-                const completedList = get().lists.find(l => l.id === listId);
-                if (completedList) get().recordPriceHistory(completedList);
-            }
         } catch (error) {
             console.error("Error updating list", error);
             get().setError("Não foi possível atualizar a lista.");
+        } finally {
+            get().setLoadingState(key, false);
+        }
+      },
+      
+      finalizeList: async (listId: string) => {
+        const key = `finalizeList-${listId}`;
+        get().setLoadingState(key, true);
+        try {
+            const listToFinalize = get().lists.find(l => l.id === listId);
+            if (!listToFinalize) throw new Error("List not found");
+
+            await get().recordPriceHistory(listToFinalize);
+            await get().deleteList(listId);
+
+        } catch (error) {
+            console.error("Error finalizing list:", error);
+            get().setError("Não foi possível finalizar a lista.");
         } finally {
             get().setLoadingState(key, false);
         }
@@ -211,7 +181,7 @@ export const useStore = create<AppState>()((set, get) => ({
         const key = `deleteList-${listId}`;
         get().setLoadingState(key, true);
         try {
-            const { error } = await supabase.from('list').delete().eq('id', listId);
+            const { error } = await supabase.from('shopping_lists').delete().eq('id', listId);
             if (error) throw error;
             set((state) => ({ lists: state.lists.filter(list => list.id !== listId) }));
         } catch (error) {
@@ -232,23 +202,28 @@ export const useStore = create<AppState>()((set, get) => ({
             if (!originalList) throw new Error("Original list not found");
 
             const { data: newListData, error: newListError } = await supabase
-                .from('list')
-                .insert({ name: `${originalList.name} (Cópia)`, category: originalList.category, list_budget: originalList.listBudget, user_id: session.user.id, status: 'active', is_pinned: false })
+                .from('shopping_lists')
+                .insert({ 
+                    name: `${originalList.name} (Cópia)`, 
+                    budget: originalList.listBudget, 
+                    user_id: session.user.id,
+                    category: originalList.category,
+                })
                 .select()
                 .single();
             if (newListError) throw newListError;
 
-            const itemsToCopy = originalList.items.map(item => ({ name: item.name, quantity: item.quantity, unit_price: item.unitPrice, category: item.category, is_purchased: false, item_order: item.order, list_id: newListData.id, user_id: session.user.id }));
+            const itemsToCopy = originalList.items.map(item => ({ name: item.name, quantity: item.quantity, unit_price: item.unitPrice, category: item.category, is_purchased: false, list_id: newListData.id, user_id: session.user.id }));
 
             if (itemsToCopy.length > 0) {
                 const { error: itemsError } = await supabase.from('list_items').insert(itemsToCopy);
                 if (itemsError) {
-                    await supabase.from('list').delete().eq('id', newListData.id); // Rollback
+                    await supabase.from('shopping_lists').delete().eq('id', newListData.id); // Rollback
                     throw itemsError;
                 }
             }
             
-            const { data: fullNewList, error: fetchError } = await supabase.from('list').select('*, list_items(*)').eq('id', newListData.id).single();
+            const { data: fullNewList, error: fetchError } = await supabase.from('shopping_lists').select('*, list_items(*)').eq('id', newListData.id).single();
             if (fetchError) throw fetchError;
 
             const newList = mapListFromDb(fullNewList);
@@ -268,11 +243,11 @@ export const useStore = create<AppState>()((set, get) => ({
         try {
             const { session } = get();
             if (!session) throw new Error("User not authenticated");
-            const { data, error } = await supabase.from('list_items').insert({ name: itemData.name, quantity: itemData.quantity, unit_price: itemData.unitPrice, category: itemData.category, list_id: listId, user_id: session.user.id, item_order: get().lists.find(l => l.id === listId)?.items.length || 0 }).select().single();
+            const { data, error } = await supabase.from('list_items').insert({ name: itemData.name, quantity: itemData.quantity, unit_price: itemData.unitPrice, category: itemData.category, list_id: listId, user_id: session.user.id }).select().single();
             if (error) throw error;
 
             const newItem = mapItemFromDb(data);
-            set(state => ({ lists: state.lists.map(l => l.id === listId ? {...l, items: [...l.items, newItem].sort((a,b) => a.order - b.order)} : l) }));
+            set(state => ({ lists: state.lists.map(l => l.id === listId ? {...l, items: [...l.items, newItem] } : l) }));
         } catch(error) {
             console.error("Error adding item", error);
             get().setError("Não foi possível adicionar o item.");
@@ -318,65 +293,30 @@ export const useStore = create<AppState>()((set, get) => ({
             get().setLoadingState(key, false);
         }
       },
-      
-      updateItemOrder: async (listId, itemOrders) => {
-          // This is a quick operation, a global loader is not ideal.
-          // For optimistic UI, we update the state first.
-          const originalLists = get().lists;
-          set((state) => ({
-              lists: state.lists.map(list => {
-                  if (list.id === listId) {
-                      const newItems = list.items.map(item => {
-                          const orderUpdate = itemOrders.find(o => o.itemId === item.id);
-                          return orderUpdate ? { ...item, order: orderUpdate.newOrder } : item;
-                      });
-                      return { ...list, items: newItems.sort((a,b) => a.order - b.order) };
-                  }
-                  return list;
-              })
-          }));
-          
-          try {
-            const updates = itemOrders.map(o => supabase.from('list_items').update({ item_order: o.newOrder }).eq('id', o.itemId));
-            const results = await Promise.all(updates);
-            const firstError = results.find(res => res.error);
-            if (firstError) throw firstError.error;
-          } catch(error) {
-            console.error("Error updating item order", error);
-            get().setError("Não foi possível reordenar os itens.");
-            set({ lists: originalLists }); // Revert on error
-          }
-      },
 
       recordPriceHistory: async (list) => {
         try {
             const { session } = get();
             if (!session) return;
 
-            const priceUpdates = list.items.filter(item => item.unitPrice > 0).map(item => ({ user_id: session.user.id, item_name: item.name, price: item.unitPrice, date: new Date().toISOString() }));
+            const historyUpdates = list.items
+              .filter(item => item.unitPrice > 0)
+              .map(item => ({ 
+                user_id: session.user.id, 
+                item_name: item.name, 
+                total_price: item.unitPrice, // Storing unit_price in total_price to power the price evolution feature.
+                purchased_at: new Date().toISOString(),
+                category: item.category,
+                original_item_id: item.id,
+             }));
             
-            if (priceUpdates.length === 0) return;
+            if (historyUpdates.length === 0) return;
 
-            const { error } = await supabase.from('price_history').insert(priceUpdates);
+            const { error } = await supabase.from('purchase_history').insert(historyUpdates);
             if (error) throw error;
             
             // OPTIMIZATION: Update state locally instead of re-fetching everything
-            set(state => {
-              const newHistory = [...state.priceHistory];
-              priceUpdates.forEach(update => {
-                  let entry = newHistory.find(h => h.itemName === update.item_name);
-                  if (entry) {
-                      entry.prices.push({ date: update.date, price: update.price });
-                  } else {
-                      newHistory.push({
-                          itemName: update.item_name,
-                          prices: [{ date: update.date, price: update.price }],
-                          user_id: update.user_id
-                      });
-                  }
-              });
-              return { priceHistory: newHistory };
-            });
+            get().fetchInitialData(); // Re-fetch to get the latest history
 
         } catch(error) {
             console.error("Error recording price history:", error);

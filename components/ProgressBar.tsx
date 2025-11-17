@@ -9,9 +9,9 @@ const ProgressBar: React.FC<ProgressBarProps> = ({ value }) => {
   const normalizedValue = Math.max(0, Math.min(100, value));
   
   const getColor = () => {
-    if (normalizedValue >= 100) return 'bg-red-500';
-    if (normalizedValue > 60) return 'bg-yellow-500';
-    return 'bg-green-500';
+    if (normalizedValue >= 100) return 'bg-ruddy-brown';
+    if (normalizedValue > 60) return 'bg-yellow-orange';
+    return 'bg-light-sea-green';
   };
 
   return (

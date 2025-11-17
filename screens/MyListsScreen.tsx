@@ -1,40 +1,27 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useStore } from '../store/store';
-import { ShoppingList, ListStatus } from '../types';
-import { PlusCircleIcon, MoreVerticalIcon, PinIcon, ArchiveIcon, CopyIcon, Trash2Icon, Edit3Icon, CheckCircle2, ArchiveRestoreIcon } from '../components/Icons';
+import { ShoppingList } from '../types';
+import { PlusCircleIcon, MoreVerticalIcon, CopyIcon, Trash2Icon, TagIcon } from '../components/Icons';
 import Modal from '../components/Modal';
-import { LIST_CATEGORIES } from '../constants';
 import { Spinner } from '../components/Spinner';
-
-const statusMap: Record<ListStatus, { label: string, color: string }> = {
-    active: { label: 'Ativa', color: 'bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300' },
-    completed: { label: 'Concluída', color: 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-300' },
-    archived: { label: 'Arquivada', color: 'bg-gray-100 dark:bg-gray-700/50 text-gray-800 dark:text-gray-300' },
-};
+import { LIST_CATEGORIES } from '../constants';
 
 const MyListsScreen: React.FC = () => {
-  const { lists, setCurrentPage, addList, deleteList, duplicateList, updateList, loadingStates } = useStore();
+  const { lists, setCurrentPage, addList, deleteList, duplicateList, loadingStates } = useStore();
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
   const [listToDelete, setListToDelete] = useState<ShoppingList | null>(null);
   const [newListName, setNewListName] = useState('');
   const [newListCategory, setNewListCategory] = useState(LIST_CATEGORIES[0]);
   const [newListBudget, setNewListBudget] = useState('');
-  const [filter, setFilter] = useState<{ status: ListStatus | 'all', category: string }>({ status: 'active', category: 'all' });
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredAndSortedLists = useMemo(() => {
     return lists
       .filter(list => {
-        const statusMatch = filter.status === 'all' || list.status === filter.status;
-        const categoryMatch = filter.category === 'all' || list.category === filter.category;
-        const searchMatch = list.name.toLowerCase().includes(searchQuery.toLowerCase());
-        return statusMatch && categoryMatch && searchMatch;
+        return list.name.toLowerCase().includes(searchQuery.toLowerCase());
       })
-      .sort((a, b) => {
-        if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      });
-  }, [lists, filter, searchQuery]);
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [lists, searchQuery]);
 
   const handleCreateList = async () => {
     if (!newListName.trim()) {
@@ -55,8 +42,8 @@ const MyListsScreen: React.FC = () => {
     await addList({ name: newListName, category: newListCategory, listBudget: budget });
 
     setNewListName('');
-    setNewListCategory(LIST_CATEGORIES[0]);
     setNewListBudget('');
+    setNewListCategory(LIST_CATEGORIES[0]);
     setCreateModalOpen(false);
   };
 
@@ -77,14 +64,14 @@ const MyListsScreen: React.FC = () => {
         <h1 className="text-2xl font-bold">Minhas Listas</h1>
         <button
           onClick={() => setCreateModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary dark:bg-primary-dark text-primary-foreground rounded-lg shadow-md hover:opacity-90 transition-opacity"
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg shadow-md hover:opacity-90 transition-opacity"
         >
           <PlusCircleIcon className="w-5 h-5" />
           <span>Nova Lista</span>
         </button>
       </header>
 
-      {/* Filters & Search */}
+      {/* Search */}
       <div className="flex flex-col md:flex-row gap-4 mb-6">
         <input 
           type="text"
@@ -93,18 +80,6 @@ const MyListsScreen: React.FC = () => {
           onChange={e => setSearchQuery(e.target.value)}
           className="flex-grow p-2 rounded-md bg-card dark:bg-dark-card border border-border dark:border-dark-border"
         />
-        <div className="flex gap-4">
-          <select value={filter.status} onChange={e => setFilter(f => ({...f, status: e.target.value as ListStatus | 'all'}))} className="p-2 w-full rounded-md bg-card dark:bg-dark-card border border-border dark:border-dark-border">
-              <option value="all">Todos Status</option>
-              <option value="active">Ativas</option>
-              <option value="completed">Concluídas</option>
-              <option value="archived">Arquivadas</option>
-          </select>
-          <select value={filter.category} onChange={e => setFilter(f => ({...f, category: e.target.value}))} className="p-2 w-full rounded-md bg-card dark:bg-dark-card border border-border dark:border-dark-border">
-              <option value="all">Todas Categorias</option>
-              {LIST_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-          </select>
-        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -116,7 +91,6 @@ const MyListsScreen: React.FC = () => {
             onSelect={() => setCurrentPage('listDetail', list.id)}
             onDeleteRequest={() => setListToDelete(list)}
             onDuplicate={duplicateList}
-            onUpdate={updateList}
             isLoading={loadingStates[`duplicateList-${list.id}`]}
           />
         ))}
@@ -163,7 +137,7 @@ const MyListsScreen: React.FC = () => {
               className="w-full p-2 bg-background dark:bg-dark-background border border-border dark:border-dark-border rounded-md"
             />
           </div>
-          <button onClick={handleCreateList} disabled={loadingStates['addList']} className="w-full flex justify-center items-center mt-4 py-2 bg-primary dark:bg-primary-dark text-primary-foreground font-bold rounded-lg disabled:opacity-50">
+          <button onClick={handleCreateList} disabled={loadingStates['addList']} className="w-full flex justify-center items-center mt-4 py-2 bg-primary text-primary-foreground font-bold rounded-lg disabled:opacity-50">
             {loadingStates['addList'] ? <Spinner /> : 'Criar Lista'}
           </button>
         </div>
@@ -196,11 +170,10 @@ interface ListCardProps {
     onSelect: () => void;
     onDeleteRequest: () => void;
     onDuplicate: (id: string) => void;
-    onUpdate: (id: string, updates: Partial<ShoppingList>) => void;
     isLoading: boolean;
 }
 
-const ListCard: React.FC<ListCardProps> = ({ list, total, onSelect, onDeleteRequest, onDuplicate, onUpdate, isLoading }) => {
+const ListCard: React.FC<ListCardProps> = ({ list, total, onSelect, onDeleteRequest, onDuplicate, isLoading }) => {
     const [menuOpen, setMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -223,43 +196,39 @@ const ListCard: React.FC<ListCardProps> = ({ list, total, onSelect, onDeleteRequ
     
     return (
         <div className="bg-card dark:bg-dark-card p-4 rounded-lg shadow-md flex flex-col justify-between transition-transform hover:scale-[1.02]">
-            <div className="flex justify-between items-start">
-                <div className="flex-1 cursor-pointer pr-2" onClick={onSelect}>
-                    {list.isPinned && <PinIcon className="w-4 h-4 text-amber-500 mb-1" />}
-                    <h3 className="font-bold text-lg text-card-foreground dark:text-dark-card-foreground">{list.name}</h3>
-                    <p className="text-sm text-foreground/60 dark:text-dark-foreground/60">{list.category}</p>
-                </div>
-                <div className="relative" ref={menuRef}>
-                    <button onClick={() => setMenuOpen(!menuOpen)} className="p-1 rounded-full hover:bg-border dark:hover:bg-dark-border">
-                        <MoreVerticalIcon className="w-5 h-5" />
-                    </button>
-                    {menuOpen && (
-                        <div className="absolute right-0 mt-2 w-48 bg-card dark:bg-dark-card border border-border dark:border-dark-border rounded-md shadow-lg z-10 animate-fade-in">
-                           {list.status === 'active' && (
-                                <>
-                                    <button onClick={() => handleAction(() => onUpdate(list.id, { isPinned: !list.isPinned }))} className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-border dark:hover:bg-dark-border"><PinIcon className="w-4 h-4"/> {list.isPinned ? 'Desafixar' : 'Fixar'}</button>
-                                    <button onClick={() => handleAction(() => onUpdate(list.id, { status: 'completed' }))} className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-border dark:hover:bg-dark-border"><CheckCircle2 className="w-4 h-4"/> Marcar como Concluída</button>
-                                    <button onClick={() => handleAction(() => onUpdate(list.id, { status: 'archived' }))} className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-border dark:hover:bg-dark-border"><ArchiveIcon className="w-4 h-4"/> Arquivar</button>
-                                </>
-                            )}
-                            {list.status === 'archived' && (
-                                <button onClick={() => handleAction(() => onUpdate(list.id, { status: 'active' }))} className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-border dark:hover:bg-dark-border"><ArchiveRestoreIcon className="w-4 h-4"/> Restaurar</button>
-                            )}
-                            <button onClick={() => handleAction(() => onDuplicate(list.id))} disabled={isLoading} className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-border dark:hover:bg-dark-border disabled:opacity-50">
-                              {isLoading ? <Spinner className="w-4 h-4"/> : <CopyIcon className="w-4 h-4"/>} 
-                              Duplicar
-                            </button>
-                            <button onClick={() => handleAction(onDeleteRequest)} className="w-full text-left px-4 py-2 text-sm text-red-500 flex items-center gap-2 hover:bg-border dark:hover:bg-dark-border"><Trash2Icon className="w-4 h-4"/> Deletar</button>
-                        </div>
-                    )}
-                </div>
+            <div>
+              <div className="flex justify-between items-start">
+                  <div className="flex-1 cursor-pointer pr-2" onClick={onSelect}>
+                      <h3 className="font-bold text-lg text-card-foreground dark:text-dark-card-foreground">{list.name}</h3>
+                      <p className="text-sm text-foreground/60 dark:text-dark-foreground/60">{list.items.length} itens</p>
+                  </div>
+                  <div className="relative" ref={menuRef}>
+                      <button onClick={() => setMenuOpen(!menuOpen)} className="p-1 rounded-full hover:bg-border dark:hover:bg-dark-border">
+                          <MoreVerticalIcon className="w-5 h-5" />
+                      </button>
+                      {menuOpen && (
+                          <div className="absolute right-0 mt-2 w-48 bg-card dark:bg-dark-card border border-border dark:border-dark-border rounded-md shadow-lg z-10 animate-fade-in">
+                              <button onClick={() => handleAction(() => onDuplicate(list.id))} disabled={isLoading} className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-border dark:hover:bg-dark-border disabled:opacity-50">
+                                {isLoading ? <Spinner className="w-4 h-4"/> : <CopyIcon className="w-4 h-4"/>} 
+                                Duplicar
+                              </button>
+                              <button onClick={() => handleAction(onDeleteRequest)} className="w-full text-left px-4 py-2 text-sm text-red-500 flex items-center gap-2 hover:bg-border dark:hover:bg-dark-border"><Trash2Icon className="w-4 h-4"/> Deletar</button>
+                          </div>
+                      )}
+                  </div>
+              </div>
+              <div className="mt-2" onClick={onSelect}>
+                  <div className="inline-flex items-center gap-1.5 bg-accent/10 text-accent dark:bg-accent/20 px-2 py-1 text-xs font-medium rounded-full">
+                      <TagIcon className="w-3 h-3" />
+                      {list.category}
+                  </div>
+              </div>
             </div>
             <div className="mt-4 cursor-pointer" onClick={onSelect}>
                 <div className="flex justify-between items-center text-sm">
-                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusMap[list.status].color}`}>{statusMap[list.status].label}</span>
                     <span className="font-semibold text-card-foreground dark:text-dark-card-foreground">R$ {total.toFixed(2)}</span>
+                    <span className="text-xs text-foreground/50 dark:text-dark-foreground/50">{new Date(list.createdAt).toLocaleDateString()}</span>
                 </div>
-                <p className="text-xs text-foreground/50 dark:text-dark-foreground/50 mt-2">{new Date(list.createdAt).toLocaleDateString()}</p>
             </div>
         </div>
     );

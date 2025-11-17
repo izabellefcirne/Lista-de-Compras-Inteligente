@@ -3,17 +3,16 @@ import { useStore } from '../store/store';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { DollarSignIcon, ShoppingCartIcon, TagIcon, PackageIcon, BarChart3Icon, WalletIcon } from '../components/Icons';
 import ProgressBar from '../components/ProgressBar';
-import { ListItem } from '../types';
+import { RawPurchaseHistoryItem } from '../types';
 
-// FIX: Define a type for product statistics to ensure type safety in calculations.
 type ProductStat = { name: string; quantity: number; totalSpent: number; prices: number[]; };
+type CategorySpending = { name: string, value: number };
 
 const StatisticsScreen: React.FC = () => {
-    const { lists, priceHistory, budgets } = useStore();
+    const { rawPurchaseHistory, priceHistory, budgets } = useStore();
     const [selectedItemForPriceChart, setSelectedItemForPriceChart] = useState<string | null>(null);
 
-    const completedLists = useMemo(() => lists.filter(l => l.status === 'completed'), [lists]);
-    const allCompletedItems: ListItem[] = useMemo(() => completedLists.flatMap(l => l.items), [completedLists]);
+    const allCompletedItems: RawPurchaseHistoryItem[] = rawPurchaseHistory;
 
     const monthlyBudgetStats = useMemo(() => {
         const now = new Date();
@@ -22,60 +21,54 @@ const StatisticsScreen: React.FC = () => {
 
         const currentBudget = budgets.find(b => b.year === currentYear && b.month === currentMonth);
         
-        const spentThisMonth = completedLists
-            .filter(list => {
-                const listDate = new Date(list.createdAt);
-                return listDate.getFullYear() === currentYear && listDate.getMonth() === currentMonth;
+        const spentThisMonth = allCompletedItems
+            .filter(item => {
+                const itemDate = new Date(item.purchased_at);
+                return itemDate.getFullYear() === currentYear && itemDate.getMonth() === currentMonth;
             })
-            .reduce((total, list) => {
-                return total + list.items.reduce((listTotal, item) => listTotal + (item.unitPrice * item.quantity), 0);
-            }, 0);
+            .reduce((total, item) => total + item.total_price, 0); // Assuming total_price is unit_price, quantity is not stored
 
         return {
             budgetAmount: currentBudget?.amount || 0,
             spentThisMonth,
             usage: currentBudget?.amount ? (spentThisMonth / currentBudget.amount) * 100 : 0,
         };
-    }, [budgets, completedLists]);
+    }, [budgets, allCompletedItems]);
 
     const productStatsMemo = useMemo(() => {
         return allCompletedItems.reduce((acc, item) => {
-            const totalItemCost = item.quantity * item.unitPrice;
-            const itemName = item.name;
+            const itemName = item.item_name;
             if (!acc[itemName]) {
                 acc[itemName] = { name: itemName, quantity: 0, totalSpent: 0, prices: [] };
             }
-            acc[itemName].quantity += item.quantity;
-            acc[itemName].totalSpent += totalItemCost;
-            acc[itemName].prices.push(item.unitPrice);
+            acc[itemName].quantity += 1; // Quantity is not stored, so we count occurrences
+            acc[itemName].totalSpent += item.total_price;
+            acc[itemName].prices.push(item.total_price);
             return acc;
         }, {} as Record<string, ProductStat>);
     }, [allCompletedItems]);
 
     const dashboardStats = useMemo(() => {
-        // FIX: Explicitly type productStatsValues to resolve type inference issues.
         const productStatsValues: ProductStat[] = Object.values(productStatsMemo);
 
         const categorySpending = allCompletedItems.reduce((acc, item) => {
-            const total = item.unitPrice * item.quantity;
-            acc[item.category] = (acc[item.category] || 0) + total;
+            acc[item.category] = (acc[item.category] || 0) + item.total_price;
             return acc;
         }, {} as Record<string, number>);
 
         const mostPurchasedItem = productStatsValues.length > 0 ? [...productStatsValues].sort((a, b) => b.quantity - a.quantity)[0] : null;
         const topSpendingCategory = Object.entries(categorySpending).length > 0 ? [...Object.entries(categorySpending)].sort((a, b) => b[1] - a[1])[0] : null;
-        const totalSpent = allCompletedItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+        const totalSpent = allCompletedItems.reduce((sum, item) => sum + item.total_price, 0);
 
         return {
             totalSpent,
-            completedListsCount: completedLists.length,
+            completedListsCount: new Set(allCompletedItems.map(i => i.purchased_at.split('T')[0])).size, // Approximate lists by unique purchase days
             mostPurchasedItem: mostPurchasedItem ? mostPurchasedItem.name : 'N/A',
             topSpendingCategory: topSpendingCategory ? topSpendingCategory[0] : 'N/A',
         };
-    }, [allCompletedItems, completedLists, productStatsMemo]);
+    }, [allCompletedItems, productStatsMemo]);
     
     const productDetails = useMemo(() => {
-        // FIX: Explicitly type productStatsValues to resolve type inference issues.
         const productStatsValues: ProductStat[] = Object.values(productStatsMemo);
         return productStatsValues.map(p => ({
             ...p,
@@ -84,30 +77,28 @@ const StatisticsScreen: React.FC = () => {
     }, [productStatsMemo]);
 
     const spendingByCategory = useMemo(() => {
-        const categorySpending = allCompletedItems.reduce((acc, item) => {
-            const total = item.unitPrice * item.quantity;
-            acc[item.category] = (acc[item.category] || 0) + total;
+        const categorySpendingMap = allCompletedItems.reduce((acc, item) => {
+            acc[item.category] = (acc[item.category] || 0) + item.total_price;
             return acc;
         }, {} as Record<string, number>);
 
-        return Object.entries(categorySpending)
-            .map(([name, value]) => ({ name, value }))
+        return Object.entries(categorySpendingMap)
+            .map(([name, value]): CategorySpending => ({ name, value }))
             .sort((a, b) => b.value - a.value);
     }, [allCompletedItems]);
 
     const spendingOverTime = useMemo(() => {
         const monthlySpending: Record<string, number> = {};
-        completedLists.forEach(list => {
-            const date = new Date(list.createdAt);
+        allCompletedItems.forEach(item => {
+            const date = new Date(item.purchased_at);
             const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-            const total = list.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-            monthlySpending[monthKey] = (monthlySpending[monthKey] || 0) + total;
+            monthlySpending[monthKey] = (monthlySpending[monthKey] || 0) + item.total_price;
         });
 
         return Object.entries(monthlySpending)
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([month, total]) => ({ month, total }));
-    }, [completedLists]);
+    }, [allCompletedItems]);
 
     const priceEvolutionData = useMemo(() => {
         if (!selectedItemForPriceChart) return [];
@@ -122,12 +113,12 @@ const StatisticsScreen: React.FC = () => {
     }, [selectedItemForPriceChart, priceHistory]);
 
 
-    if (completedLists.length === 0) {
+    if (allCompletedItems.length === 0) {
         return (
           <div className="p-4 md:p-6 text-center h-full flex flex-col justify-center items-center">
             <BarChart3Icon className="w-16 h-16 text-foreground/20 dark:text-dark-foreground/20 mb-4" />
             <h2 className="text-xl font-semibold">Sem dados para analisar</h2>
-            <p className="text-foreground/60 dark:text-dark-foreground/60">Conclua uma lista de compras para ver suas estatísticas.</p>
+            <p className="text-foreground/60 dark:text-dark-foreground/60">Finalize uma compra para ver suas estatísticas.</p>
           </div>
         );
     }
@@ -136,7 +127,7 @@ const StatisticsScreen: React.FC = () => {
         <div className="p-4 md:p-6 animate-slide-in-up space-y-8">
             <div>
               <h1 className="text-2xl font-bold">Dashboard Financeiro</h1>
-              <p className="text-foreground/60 dark:text-dark-foreground/60">Seus insights de gastos baseados em listas concluídas.</p>
+              <p className="text-foreground/60 dark:text-dark-foreground/60">Seus insights de gastos baseados em compras finalizadas.</p>
             </div>
             
             {monthlyBudgetStats.budgetAmount > 0 && (
@@ -165,7 +156,7 @@ const StatisticsScreen: React.FC = () => {
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <StatCard icon={DollarSignIcon} title="Gasto Total" value={`R$ ${dashboardStats.totalSpent.toFixed(2)}`} />
-                <StatCard icon={ShoppingCartIcon} title="Listas Concluídas" value={dashboardStats.completedListsCount.toString()} />
+                <StatCard icon={ShoppingCartIcon} title="Compras Feitas" value={dashboardStats.completedListsCount.toString()} />
                 <StatCard icon={PackageIcon} title="Item Mais Comprado" value={dashboardStats.mostPurchasedItem} />
                 <StatCard icon={TagIcon} title="Categoria Principal" value={dashboardStats.topSpendingCategory} />
             </div>
@@ -177,7 +168,7 @@ const StatisticsScreen: React.FC = () => {
                         <XAxis type="number" tickFormatter={(value) => `R$${value}`} />
                         <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }}/>
                         <Tooltip formatter={(value: number) => `R$ ${value.toFixed(2)}`} />
-                        <Bar dataKey="value" name="Gasto" fill="#8884d8" barSize={20} />
+                        <Bar dataKey="value" name="Gasto" fill="#073376" barSize={20} />
                     </BarChart>
                 </ResponsiveContainer>
             </ChartCard>
@@ -214,7 +205,7 @@ const StatisticsScreen: React.FC = () => {
                         <XAxis dataKey="month" />
                         <YAxis tickFormatter={(value) => `R$${value}`} />
                         <Tooltip formatter={(value: number) => `R$ ${value.toFixed(2)}`} />
-                        <Bar dataKey="total" name="Total Gasto" fill="#82ca9d" />
+                        <Bar dataKey="total" name="Total Gasto" fill="#29B2A0" />
                     </BarChart>
                 </ResponsiveContainer>
             </ChartCard>
@@ -235,7 +226,7 @@ const StatisticsScreen: React.FC = () => {
                             <XAxis dataKey="date" />
                             <YAxis domain={['dataMin - 1', 'dataMax + 1']} tickFormatter={(value) => `R$${value}`} />
                             <Tooltip formatter={(value: number) => `R$ ${value.toFixed(2)}`} />
-                            <Line type="monotone" dataKey="price" name="Preço" stroke="#ff7300" strokeWidth={2} />
+                            <Line type="monotone" dataKey="price" name="Preço" stroke="#FFAE42" strokeWidth={2} />
                         </LineChart>
                     </ResponsiveContainer>
                 )}

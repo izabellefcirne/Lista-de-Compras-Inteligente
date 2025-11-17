@@ -1,6 +1,5 @@
 import { Session } from '@supabase/supabase-js';
 
-export type ListStatus = 'active' | 'completed' | 'archived';
 export type Theme = 'light' | 'dark' | 'system';
 export type Page = 'welcome' | 'setBudget' | 'myLists' | 'listDetail' | 'statistics' | 'history' | 'settings';
 
@@ -13,7 +12,6 @@ export interface ListItem {
   unitPrice: number;
   category: string;
   isPurchased: boolean;
-  order: number;
   created_at?: string;
 }
 
@@ -21,13 +19,11 @@ export interface ShoppingList {
   id: string;
   user_id?: string;
   name: string;
-  category: string;
   createdAt: string;
-  status: ListStatus;
   items: ListItem[];
-  isPinned: boolean;
   spendingForecast?: number;
   listBudget?: number;
+  category: string;
 }
 
 export interface Budget {
@@ -43,6 +39,16 @@ export interface PriceHistoryEntry {
   user_id?: string;
   itemName: string;
   prices: { date: string; price: number }[];
+}
+
+export interface RawPurchaseHistoryItem {
+    id: string;
+    user_id: string;
+    item_name: string;
+    total_price: number;
+    purchased_at: string;
+    category: string;
+    original_item_id: string;
 }
 
 export interface AppState {
@@ -63,6 +69,7 @@ export interface AppState {
   lists: ShoppingList[];
   budgets: Budget[];
   priceHistory: PriceHistoryEntry[];
+  rawPurchaseHistory: RawPurchaseHistoryItem[];
 
   // Actions
   // UI Actions
@@ -80,16 +87,16 @@ export interface AppState {
   setMonthlyBudget: (amount: number, date: Date) => Promise<void>;
   
   // List Actions
-  addList: (list: Omit<ShoppingList, 'id' | 'createdAt' | 'status' | 'items' | 'isPinned'>) => Promise<void>;
-  updateList: (listId: string, updates: Partial<ShoppingList>) => Promise<void>;
+  addList: (list: { name: string, category: string, listBudget?: number }) => Promise<void>;
+  updateList: (listId: string, updates: { name?: string; listBudget?: number; category?: string; }) => Promise<void>;
   deleteList: (listId: string) => Promise<void>;
   duplicateList: (listId: string) => Promise<void>;
+  finalizeList: (listId: string) => Promise<void>;
 
   // Item Actions
-  addItemToList: (listId: string, item: Omit<ListItem, 'id' | 'isPurchased' | 'order'>) => Promise<void>;
+  addItemToList: (listId: string, item: Omit<ListItem, 'id' | 'isPurchased' | 'created_at'>) => Promise<void>;
   updateItemInList: (listId: string, itemId: string, updates: Partial<ListItem>) => Promise<void>;
   removeItemFromList: (listId: string, itemId: string) => Promise<void>;
-  updateItemOrder: (listId: string, itemOrders: { itemId: string; newOrder: number }[]) => Promise<void>;
   
   // Price History Actions
   recordPriceHistory: (list: ShoppingList) => Promise<void>;

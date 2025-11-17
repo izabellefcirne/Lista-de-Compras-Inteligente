@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useStore } from '../store/store';
 import { ListItem } from '../types';
-import { ChevronLeftIcon, PlusCircleIcon, Trash2Icon, Edit3Icon, GripVerticalIcon, EyeIcon, EyeOffIcon, CheckSquareIcon, SquareIcon, MoreVerticalIcon, DollarSignIcon, CheckCircle2 } from '../components/Icons';
+import { ChevronLeftIcon, PlusCircleIcon, Trash2Icon, Edit3Icon, EyeIcon, EyeOffIcon, CheckSquareIcon, SquareIcon, MoreVerticalIcon, DollarSignIcon, CheckCircle2 } from '../components/Icons';
 import { ITEM_CATEGORIES } from '../constants';
 import ProgressBar from '../components/ProgressBar';
 import Modal from '../components/Modal';
@@ -13,7 +13,7 @@ interface AutocompleteSuggestion {
 }
 
 const ListDetailScreen: React.FC<{ listId: string }> = ({ listId }) => {
-  const { lists, priceHistory, setCurrentPage, addItemToList, updateItemInList, removeItemFromList, updateItemOrder, updateList, loadingStates } = useStore();
+  const { lists, priceHistory, setCurrentPage, addItemToList, updateItemInList, removeItemFromList, updateList, finalizeList, loadingStates } = useStore();
   
   const list = useMemo(() => lists.find(l => l.id === listId), [lists, listId]);
   
@@ -24,7 +24,6 @@ const ListDetailScreen: React.FC<{ listId: string }> = ({ listId }) => {
 
   const [editingItem, setEditingItem] = useState<ListItem | null>(null);
   const [ghostMode, setGhostMode] = useState(false);
-  const [draggedItem, setDraggedItem] = useState<ListItem | null>(null);
 
   const [itemName, setItemName] = useState('');
   const [itemQuantity, setItemQuantity] = useState('1');
@@ -74,7 +73,7 @@ const ListDetailScreen: React.FC<{ listId: string }> = ({ listId }) => {
     if (!list) return {};
     const itemsToShow = ghostMode ? list.items.filter(i => !i.isPurchased) : list.items;
     
-    return itemsToShow.sort((a,b) => a.order - b.order).reduce((acc, item) => {
+    return itemsToShow.sort((a,b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()).reduce((acc, item) => {
       (acc[item.category] = acc[item.category] || []).push(item);
       return acc;
     }, {} as Record<string, ListItem[]>);
@@ -156,19 +155,8 @@ const ListDetailScreen: React.FC<{ listId: string }> = ({ listId }) => {
   };
   
   const handleFinalizeList = async () => {
-    await updateList(listId, { status: 'completed' });
+    await finalizeList(listId);
     setCurrentPage('myLists');
-  };
-
-  const handleDrop = (targetItem: ListItem) => {
-    if (!draggedItem || !list || draggedItem.id === targetItem.id) return;
-    const currentItems = [...list.items];
-    const draggedIndex = currentItems.findIndex(i => i.id === draggedItem.id);
-    const targetIndex = currentItems.findIndex(i => i.id === targetItem.id);
-    const [reorderedItem] = currentItems.splice(draggedIndex, 1);
-    currentItems.splice(targetIndex, 0, reorderedItem);
-    const itemOrders = currentItems.map((item, index) => ({ itemId: item.id, newOrder: index }));
-    updateItemOrder(listId, itemOrders);
   };
   
   if (!list) return <div className="p-4">Carregando...</div>;
@@ -183,7 +171,7 @@ const ListDetailScreen: React.FC<{ listId: string }> = ({ listId }) => {
           </button>
           <div>
             <h1 className="text-2xl font-bold">{list.name}</h1>
-            <p className="text-foreground/70 dark:text-dark-foreground/70">{list.category}</p>
+            <p className="text-foreground/70 dark:text-dark-foreground/70">{list.items.length} itens</p>
           </div>
         </div>
         <div className="relative" ref={menuRef}>
@@ -193,9 +181,9 @@ const ListDetailScreen: React.FC<{ listId: string }> = ({ listId }) => {
             {isMenuOpen && (
                  <div className="absolute right-0 mt-2 w-56 bg-card dark:bg-dark-card border border-border dark:border-dark-border rounded-md shadow-lg z-10 animate-fade-in">
                     <button onClick={() => { setBudgetInput(list.listBudget?.toString().replace('.', ',') || ''); setBudgetModalOpen(true); setMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-border dark:hover:bg-dark-border"><DollarSignIcon className="w-4 h-4"/> Definir/Alterar Orçamento</button>
-                    <button onClick={() => { handleFinalizeList(); setMenuOpen(false); }} disabled={loadingStates[`updateList-${listId}`]} className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-border dark:hover:bg-dark-border disabled:opacity-50">
-                      {loadingStates[`updateList-${listId}`] ? <Spinner className="w-4 h-4"/> : <CheckCircle2 className="w-4 h-4"/>} 
-                      Finalizar Compra
+                    <button onClick={() => { handleFinalizeList(); setMenuOpen(false); }} disabled={loadingStates[`finalizeList-${listId}`]} className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-border dark:hover:bg-dark-border disabled:opacity-50">
+                      {loadingStates[`finalizeList-${listId}`] ? <Spinner className="w-4 h-4"/> : <CheckCircle2 className="w-4 h-4"/>} 
+                      Finalizar e Arquivar
                     </button>
                  </div>
             )}
@@ -251,11 +239,9 @@ const ListDetailScreen: React.FC<{ listId: string }> = ({ listId }) => {
             <ul className="bg-card dark:bg-dark-card rounded-lg shadow-md divide-y divide-border dark:divide-dark-border">
               {items.map(item => (
                 <li 
-                  key={item.id} 
-                  draggable onDragStart={() => setDraggedItem(item)} onDragEnter={(e) => { e.preventDefault(); if (draggedItem && draggedItem.id !== item.id) e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.1)'; }} onDragLeave={(e) => { e.currentTarget.style.backgroundColor = ''; }} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.currentTarget.style.backgroundColor = ''; handleDrop(item); }} onDragEnd={() => setDraggedItem(null)}
-                  className={`flex items-center p-3 transition-all ${item.isPurchased ? 'opacity-40 bg-gray-50 dark:bg-gray-800/20' : ''} ${draggedItem?.id === item.id ? 'opacity-50' : ''}`}
+                  key={item.id}
+                  className={`flex items-center p-3 transition-all ${item.isPurchased ? 'opacity-40 bg-gray-50 dark:bg-gray-800/20' : ''}`}
                 >
-                  <button className="cursor-grab pr-2 text-foreground/30 dark:text-dark-foreground/30"><GripVerticalIcon className="w-5 h-5"/></button>
                   <button onClick={() => updateItemInList(listId, item.id, { isPurchased: !item.isPurchased })} className="mr-3">
                     {item.isPurchased ? <CheckSquareIcon className="w-6 h-6 text-primary dark:text-primary-dark"/> : <SquareIcon className="w-6 h-6 text-foreground/50 dark:text-dark-foreground/50"/>}
                   </button>
