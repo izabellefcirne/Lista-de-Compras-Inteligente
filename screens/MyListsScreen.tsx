@@ -4,6 +4,7 @@ import { ShoppingList, ListStatus } from '../types';
 import { PlusCircleIcon, MoreVerticalIcon, PinIcon, ArchiveIcon, CopyIcon, Trash2Icon, Edit3Icon, CheckCircle2, ArchiveRestoreIcon } from '../components/Icons';
 import Modal from '../components/Modal';
 import { LIST_CATEGORIES } from '../constants';
+import { Spinner } from '../components/Spinner';
 
 const statusMap: Record<ListStatus, { label: string, color: string }> = {
     active: { label: 'Ativa', color: 'bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300' },
@@ -12,7 +13,7 @@ const statusMap: Record<ListStatus, { label: string, color: string }> = {
 };
 
 const MyListsScreen: React.FC = () => {
-  const { lists, setCurrentPage, addList, deleteList, duplicateList, updateList } = useStore();
+  const { lists, setCurrentPage, addList, deleteList, duplicateList, updateList, loadingStates } = useStore();
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
   const [listToDelete, setListToDelete] = useState<ShoppingList | null>(null);
   const [newListName, setNewListName] = useState('');
@@ -116,6 +117,7 @@ const MyListsScreen: React.FC = () => {
             onDeleteRequest={() => setListToDelete(list)}
             onDuplicate={duplicateList}
             onUpdate={updateList}
+            isLoading={loadingStates[`duplicateList-${list.id}`]}
           />
         ))}
         {filteredAndSortedLists.length === 0 && (
@@ -161,8 +163,8 @@ const MyListsScreen: React.FC = () => {
               className="w-full p-2 bg-background dark:bg-dark-background border border-border dark:border-dark-border rounded-md"
             />
           </div>
-          <button onClick={handleCreateList} className="w-full mt-4 py-2 bg-primary dark:bg-primary-dark text-primary-foreground font-bold rounded-lg">
-            Criar Lista
+          <button onClick={handleCreateList} disabled={loadingStates['addList']} className="w-full flex justify-center items-center mt-4 py-2 bg-primary dark:bg-primary-dark text-primary-foreground font-bold rounded-lg disabled:opacity-50">
+            {loadingStates['addList'] ? <Spinner /> : 'Criar Lista'}
           </button>
         </div>
       </Modal>
@@ -173,7 +175,13 @@ const MyListsScreen: React.FC = () => {
             <p className="text-sm text-red-500 mt-2">Esta ação não pode ser desfeita.</p>
             <div className="flex justify-end gap-4 mt-6">
                 <button onClick={() => setListToDelete(null)} className="px-4 py-2 rounded-lg hover:bg-border dark:hover:bg-dark-border">Cancelar</button>
-                <button onClick={handleDeleteConfirmation} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700">Excluir</button>
+                <button 
+                  onClick={handleDeleteConfirmation} 
+                  disabled={loadingStates[`deleteList-${listToDelete?.id}`]}
+                  className="w-24 flex justify-center items-center px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 disabled:opacity-50"
+                >
+                  {loadingStates[`deleteList-${listToDelete?.id}`] ? <Spinner /> : 'Excluir'}
+                </button>
             </div>
         </div>
       </Modal>
@@ -189,9 +197,10 @@ interface ListCardProps {
     onDeleteRequest: () => void;
     onDuplicate: (id: string) => void;
     onUpdate: (id: string, updates: Partial<ShoppingList>) => void;
+    isLoading: boolean;
 }
 
-const ListCard: React.FC<ListCardProps> = ({ list, total, onSelect, onDeleteRequest, onDuplicate, onUpdate }) => {
+const ListCard: React.FC<ListCardProps> = ({ list, total, onSelect, onDeleteRequest, onDuplicate, onUpdate, isLoading }) => {
     const [menuOpen, setMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -236,7 +245,10 @@ const ListCard: React.FC<ListCardProps> = ({ list, total, onSelect, onDeleteRequ
                             {list.status === 'archived' && (
                                 <button onClick={() => handleAction(() => onUpdate(list.id, { status: 'active' }))} className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-border dark:hover:bg-dark-border"><ArchiveRestoreIcon className="w-4 h-4"/> Restaurar</button>
                             )}
-                            <button onClick={() => handleAction(() => onDuplicate(list.id))} className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-border dark:hover:bg-dark-border"><CopyIcon className="w-4 h-4"/> Duplicar</button>
+                            <button onClick={() => handleAction(() => onDuplicate(list.id))} disabled={isLoading} className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-border dark:hover:bg-dark-border disabled:opacity-50">
+                              {isLoading ? <Spinner className="w-4 h-4"/> : <CopyIcon className="w-4 h-4"/>} 
+                              Duplicar
+                            </button>
                             <button onClick={() => handleAction(onDeleteRequest)} className="w-full text-left px-4 py-2 text-sm text-red-500 flex items-center gap-2 hover:bg-border dark:hover:bg-dark-border"><Trash2Icon className="w-4 h-4"/> Deletar</button>
                         </div>
                     )}

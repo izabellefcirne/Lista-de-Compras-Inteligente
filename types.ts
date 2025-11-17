@@ -46,6 +46,10 @@ export interface PriceHistoryEntry {
 }
 
 export interface AppState {
+  // UI State
+  loadingStates: { [key: string]: boolean };
+  error: string | null;
+
   // Auth
   session: Session | null;
   
@@ -61,6 +65,10 @@ export interface AppState {
   priceHistory: PriceHistoryEntry[];
 
   // Actions
+  // UI Actions
+  setLoadingState: (key: string, isLoading: boolean) => void;
+  setError: (error: string | null) => void;
+
   setSession: (session: Session | null) => void;
   signOut: () => Promise<void>;
   fetchInitialData: () => Promise<void>;

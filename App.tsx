@@ -11,6 +11,7 @@ import SettingsScreen from './screens/SettingsScreen';
 import AuthScreen from './screens/AuthScreen';
 import { Page } from './types';
 import { supabase } from './lib/supabase';
+import Toast from './components/Toast';
 
 const App: React.FC = () => {
   const { currentPage, currentListId, hasSeenOnboarding, theme, session, setSession, fetchInitialData } = useStore();
@@ -71,7 +72,12 @@ const App: React.FC = () => {
     return pageContent;
   };
 
-  return <>{renderContent()}</>;
+  return (
+    <>
+      {renderContent()}
+      <Toast />
+    </>
+  );
 };
 
 export default App;

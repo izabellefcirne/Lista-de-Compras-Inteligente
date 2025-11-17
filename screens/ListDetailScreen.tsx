@@ -5,6 +5,7 @@ import { ChevronLeftIcon, PlusCircleIcon, Trash2Icon, Edit3Icon, GripVerticalIco
 import { ITEM_CATEGORIES } from '../constants';
 import ProgressBar from '../components/ProgressBar';
 import Modal from '../components/Modal';
+import { Spinner } from '../components/Spinner';
 
 interface AutocompleteSuggestion {
     name: string;
@@ -12,7 +13,7 @@ interface AutocompleteSuggestion {
 }
 
 const ListDetailScreen: React.FC<{ listId: string }> = ({ listId }) => {
-  const { lists, priceHistory, setCurrentPage, addItemToList, updateItemInList, removeItemFromList, updateItemOrder, updateList } = useStore();
+  const { lists, priceHistory, setCurrentPage, addItemToList, updateItemInList, removeItemFromList, updateItemOrder, updateList, loadingStates } = useStore();
   
   const list = useMemo(() => lists.find(l => l.id === listId), [lists, listId]);
   
@@ -192,7 +193,10 @@ const ListDetailScreen: React.FC<{ listId: string }> = ({ listId }) => {
             {isMenuOpen && (
                  <div className="absolute right-0 mt-2 w-56 bg-card dark:bg-dark-card border border-border dark:border-dark-border rounded-md shadow-lg z-10 animate-fade-in">
                     <button onClick={() => { setBudgetInput(list.listBudget?.toString().replace('.', ',') || ''); setBudgetModalOpen(true); setMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-border dark:hover:bg-dark-border"><DollarSignIcon className="w-4 h-4"/> Definir/Alterar Orçamento</button>
-                    <button onClick={() => { handleFinalizeList(); setMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-border dark:hover:bg-dark-border"><CheckCircle2 className="w-4 h-4"/> Finalizar Compra</button>
+                    <button onClick={() => { handleFinalizeList(); setMenuOpen(false); }} disabled={loadingStates[`updateList-${listId}`]} className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-border dark:hover:bg-dark-border disabled:opacity-50">
+                      {loadingStates[`updateList-${listId}`] ? <Spinner className="w-4 h-4"/> : <CheckCircle2 className="w-4 h-4"/>} 
+                      Finalizar Compra
+                    </button>
                  </div>
             )}
         </div>
@@ -292,8 +296,12 @@ const ListDetailScreen: React.FC<{ listId: string }> = ({ listId }) => {
             <select value={itemCategory} onChange={e => setItemCategory(e.target.value)} className="w-full p-2 bg-background dark:bg-dark-background border border-border dark:border-dark-border rounded-md">
                 {ITEM_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
             </select>
-            <button onClick={handleItemFormSubmit} className="w-full mt-4 py-2 bg-primary dark:bg-primary-dark text-primary-foreground font-bold rounded-lg">
-                {editingItem ? 'Salvar Alterações' : 'Adicionar'}
+            <button 
+                onClick={handleItemFormSubmit} 
+                disabled={loadingStates['addItem'] || loadingStates[`updateItem-${editingItem?.id}`]}
+                className="w-full flex justify-center items-center mt-4 py-2 bg-primary dark:bg-primary-dark text-primary-foreground font-bold rounded-lg disabled:opacity-50"
+            >
+                {loadingStates['addItem'] || loadingStates[`updateItem-${editingItem?.id}`] ? <Spinner /> : (editingItem ? 'Salvar Alterações' : 'Adicionar')}
             </button>
         </div>
       </Modal>
@@ -303,7 +311,13 @@ const ListDetailScreen: React.FC<{ listId: string }> = ({ listId }) => {
             <p>Você tem certeza que deseja excluir o item "<strong>{itemToDelete?.name}</strong>"?</p>
             <div className="flex justify-end gap-4 mt-6">
                 <button onClick={() => setItemToDelete(null)} className="px-4 py-2 rounded-lg hover:bg-border dark:hover:bg-dark-border">Cancelar</button>
-                <button onClick={handleDeleteItemConfirmation} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700">Excluir</button>
+                <button 
+                    onClick={handleDeleteItemConfirmation}
+                    disabled={loadingStates[`deleteItem-${itemToDelete?.id}`]}
+                    className="w-24 flex justify-center items-center px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 disabled:opacity-50"
+                >
+                    {loadingStates[`deleteItem-${itemToDelete?.id}`] ? <Spinner /> : 'Excluir'}
+                </button>
             </div>
         </div>
       </Modal>
@@ -314,7 +328,13 @@ const ListDetailScreen: React.FC<{ listId: string }> = ({ listId }) => {
             <label htmlFor="listBudget" className="block text-sm font-medium mb-1">Valor do Orçamento (R$)</label>
             <input id="listBudget" type="text" inputMode="decimal" value={budgetInput} onChange={(e) => setBudgetInput(e.target.value)} placeholder="Ex: 150,00" className="w-full p-2 bg-background dark:bg-dark-background border border-border dark:border-dark-border rounded-md"/>
           </div>
-          <button onClick={handleBudgetFormSubmit} className="w-full mt-4 py-2 bg-primary dark:bg-primary-dark text-primary-foreground font-bold rounded-lg">Salvar Orçamento</button>
+          <button 
+            onClick={handleBudgetFormSubmit} 
+            disabled={loadingStates[`updateList-${listId}`]}
+            className="w-full flex justify-center items-center mt-4 py-2 bg-primary dark:bg-primary-dark text-primary-foreground font-bold rounded-lg disabled:opacity-50"
+          >
+            {loadingStates[`updateList-${listId}`] ? <Spinner /> : 'Salvar Orçamento'}
+          </button>
         </div>
       </Modal>
     </div>

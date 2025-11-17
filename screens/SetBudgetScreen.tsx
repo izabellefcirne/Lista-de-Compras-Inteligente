@@ -1,10 +1,10 @@
-
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../store/store';
 import { Budget } from '../types';
+import { Spinner } from '../components/Spinner';
 
 const SetBudgetScreen: React.FC = () => {
-  const { budgets, setMonthlyBudget, setCurrentPage } = useStore();
+  const { budgets, setMonthlyBudget, setCurrentPage, loadingStates } = useStore();
   const [budget, setBudget] = useState('');
   const [currentBudget, setCurrentBudget] = useState<Budget | null>(null);
 
@@ -17,16 +17,17 @@ const SetBudgetScreen: React.FC = () => {
     }
   }, [budgets]);
 
-  const handleSetBudget = () => {
+  const handleSetBudget = async () => {
     const amount = parseFloat(budget);
     if (!isNaN(amount) && amount > 0) {
-      setMonthlyBudget(amount, new Date());
+      await setMonthlyBudget(amount, new Date());
       setCurrentPage('myLists');
     } else {
       alert('Por favor, insira um valor válido para o orçamento.');
     }
   };
-
+  
+  const isLoading = loadingStates['setMonthlyBudget'];
   const currentMonthName = new Date().toLocaleString('default', { month: 'long' });
 
   return (
@@ -64,9 +65,10 @@ const SetBudgetScreen: React.FC = () => {
 
           <button
             onClick={handleSetBudget}
-            className="w-full mt-6 py-3 bg-primary dark:bg-primary-dark text-primary-foreground font-bold rounded-lg shadow-md hover:opacity-90 transition-opacity"
+            disabled={isLoading}
+            className="w-full flex justify-center items-center mt-6 py-3 bg-primary dark:bg-primary-dark text-primary-foreground font-bold rounded-lg shadow-md hover:opacity-90 transition-opacity disabled:opacity-50"
           >
-            {currentBudget ? 'Atualizar Orçamento' : 'Salvar e ir para Minhas Listas'}
+            {isLoading ? <Spinner /> : (currentBudget ? 'Atualizar Orçamento' : 'Salvar e ir para Minhas Listas')}
           </button>
           
           <button

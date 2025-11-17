@@ -2,9 +2,10 @@ import React from 'react';
 import { useStore } from '../store/store';
 import { Theme } from '../types';
 import { SunIcon, MoonIcon, LogOutIcon } from '../components/Icons';
+import { Spinner } from '../components/Spinner';
 
 const SettingsScreen: React.FC = () => {
-  const { theme, setTheme, setCurrentPage, signOut, session } = useStore();
+  const { theme, setTheme, setCurrentPage, signOut, session, loadingStates } = useStore();
 
   return (
     <div className="p-4 md:p-6 animate-slide-in-up">
@@ -18,10 +19,10 @@ const SettingsScreen: React.FC = () => {
           </p>
           <button
             onClick={signOut}
-            className="w-full flex items-center justify-center gap-2 mt-3 py-3 text-red-600 dark:text-red-500 bg-red-500/10 font-semibold rounded-lg hover:bg-red-500/20 transition-colors"
+            disabled={loadingStates['signOut']}
+            className="w-full flex items-center justify-center gap-2 mt-3 py-3 text-red-600 dark:text-red-500 bg-red-500/10 font-semibold rounded-lg hover:bg-red-500/20 transition-colors disabled:opacity-50"
           >
-            <LogOutIcon className="w-5 h-5"/>
-            Sair
+            {loadingStates['signOut'] ? <Spinner className="w-5 h-5"/> : <><LogOutIcon className="w-5 h-5"/> Sair</>}
           </button>
         </div>
 
@@ -64,12 +65,6 @@ const SettingsScreen: React.FC = () => {
           <h2 className="font-semibold mb-3">Notificações (em breve)</h2>
           <p className="text-sm text-foreground/70 dark:text-dark-foreground/70">
             Receba lembretes sobre suas listas e ofertas.
-          </p>
-        </div>
-         <div className="bg-card dark:bg-dark-card p-4 rounded-lg shadow-md opacity-50">
-          <h2 className="font-semibold mb-3">Sincronização na Nuvem (em breve)</h2>
-          <p className="text-sm text-foreground/70 dark:text-dark-foreground/70">
-            Salve suas listas e acesse de qualquer dispositivo.
           </p>
         </div>
       </div>
