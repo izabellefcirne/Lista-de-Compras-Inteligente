@@ -6,18 +6,20 @@ import { ITEM_CATEGORIES } from '../constants';
 import ProgressBar from '../components/ProgressBar';
 import Modal from '../components/Modal';
 
-interface ListDetailScreenProps {
-  listId: string;
+interface AutocompleteSuggestion {
+    name: string;
+    lastPrice: number;
 }
 
-const ListDetailScreen: React.FC<ListDetailScreenProps> = ({ listId }) => {
-  const { lists, setCurrentPage, addItemToList, updateItemInList, removeItemFromList, updateItemOrder, updateList } = useStore();
+const ListDetailScreen: React.FC<{ listId: string }> = ({ listId }) => {
+  const { lists, priceHistory, setCurrentPage, addItemToList, updateItemInList, removeItemFromList, updateItemOrder, updateList } = useStore();
   
   const list = useMemo(() => lists.find(l => l.id === listId), [lists, listId]);
   
   const [isItemModalOpen, setItemModalOpen] = useState(false);
   const [isBudgetModalOpen, setBudgetModalOpen] = useState(false);
   const [isMenuOpen, setMenuOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<ListItem | null>(null);
 
   const [editingItem, setEditingItem] = useState<ListItem | null>(null);
   const [ghostMode, setGhostMode] = useState(false);
@@ -29,9 +31,41 @@ const ListDetailScreen: React.FC<ListDetailScreenProps> = ({ listId }) => {
   const [itemCategory, setItemCategory] = useState(ITEM_CATEGORIES[0]);
   const [budgetInput, setBudgetInput] = useState('');
   
+  const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<AutocompleteSuggestion[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Budget calculations
+  const uniqueItemsFromHistory = useMemo((): AutocompleteSuggestion[] => {
+    const itemMap = new Map<string, AutocompleteSuggestion>();
+    priceHistory.forEach(entry => {
+        const latestPrice = entry.prices[entry.prices.length - 1];
+        itemMap.set(entry.itemName.toLowerCase(), {
+            name: entry.itemName,
+            lastPrice: latestPrice.price
+        });
+    });
+    return Array.from(itemMap.values());
+  }, [priceHistory]);
+  
+  const handleItemNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setItemName(value);
+    if (value.length > 1) {
+        setAutocompleteSuggestions(
+            uniqueItemsFromHistory.filter(item => 
+                item.name.toLowerCase().includes(value.toLowerCase())
+            ).slice(0, 5) // Limit to 5 suggestions
+        );
+    } else {
+        setAutocompleteSuggestions([]);
+    }
+  };
+
+  const handleSuggestionClick = (suggestion: AutocompleteSuggestion) => {
+    setItemName(suggestion.name);
+    setItemPrice(suggestion.lastPrice.toString().replace('.', ','));
+    setAutocompleteSuggestions([]);
+  };
+
   const listTotal = useMemo(() => list?.items.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0) || 0, [list]);
   const budgetUsage = list?.listBudget ? (listTotal / list.listBudget) * 100 : 0;
   
@@ -46,9 +80,7 @@ const ListDetailScreen: React.FC<ListDetailScreenProps> = ({ listId }) => {
   }, [list, ghostMode]);
 
   useEffect(() => {
-    if (!list) {
-      setCurrentPage('myLists');
-    }
+    if (!list) setCurrentPage('myLists');
   }, [list, setCurrentPage]);
 
   useEffect(() => {
@@ -58,11 +90,8 @@ const ListDetailScreen: React.FC<ListDetailScreenProps> = ({ listId }) => {
         }
     };
     document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-        document.removeEventListener("mousedown", handleClickOutside);
-    };
-}, [isMenuOpen]);
-
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isMenuOpen]);
 
   const resetForm = () => {
     setItemName('');
@@ -70,6 +99,7 @@ const ListDetailScreen: React.FC<ListDetailScreenProps> = ({ listId }) => {
     setItemPrice('');
     setItemCategory(ITEM_CATEGORIES[0]);
     setEditingItem(null);
+    setAutocompleteSuggestions([]);
   };
   
   const openAddModal = () => {
@@ -84,27 +114,20 @@ const ListDetailScreen: React.FC<ListDetailScreenProps> = ({ listId }) => {
     setItemPrice(item.unitPrice > 0 ? item.unitPrice.toString().replace('.', ',') : '');
     setItemCategory(item.category);
     setItemModalOpen(true);
+    setAutocompleteSuggestions([]);
   };
   
   const handleItemFormSubmit = () => {
-    if (!itemName.trim() || !itemQuantity.trim()) {
-      alert("Por favor, preencha o nome e a quantidade do item.");
-      return;
-    }
+    if (!itemName.trim() || !itemQuantity.trim()) { alert("Por favor, preencha o nome e a quantidade do item."); return; }
     const quantity = parseInt(itemQuantity, 10);
-    if (isNaN(quantity) || quantity <= 0) {
-      alert("A quantidade deve ser um número maior que zero.");
-      return;
-    }
+    if (isNaN(quantity) || quantity <= 0) { alert("A quantidade deve ser um número maior que zero."); return; }
     const priceString = itemPrice.replace(',', '.').trim();
     let price = 0;
     if (priceString !== '') {
         price = parseFloat(priceString);
-        if (isNaN(price) || price < 0) {
-          alert("O preço informado é inválido. Ele deve ser um número positivo ou o campo deve ser deixado em branco.");
-          return;
-        }
+        if (isNaN(price) || price < 0) { alert("O preço informado é inválido. Ele deve ser um número positivo ou o campo deve ser deixado em branco."); return; }
     }
+
     if (editingItem) {
       updateItemInList(listId, editingItem.id, { name: itemName, quantity, unitPrice: price, category: itemCategory });
     } else {
@@ -112,6 +135,13 @@ const ListDetailScreen: React.FC<ListDetailScreenProps> = ({ listId }) => {
     }
     setItemModalOpen(false);
     resetForm();
+  };
+  
+  const handleDeleteItemConfirmation = () => {
+    if (itemToDelete) {
+      removeItemFromList(listId, itemToDelete.id);
+      setItemToDelete(null);
+    }
   };
 
   const handleBudgetFormSubmit = () => {
@@ -131,19 +161,12 @@ const ListDetailScreen: React.FC<ListDetailScreenProps> = ({ listId }) => {
 
   const handleDrop = (targetItem: ListItem) => {
     if (!draggedItem || !list || draggedItem.id === targetItem.id) return;
-
     const currentItems = [...list.items];
     const draggedIndex = currentItems.findIndex(i => i.id === draggedItem.id);
     const targetIndex = currentItems.findIndex(i => i.id === targetItem.id);
-
     const [reorderedItem] = currentItems.splice(draggedIndex, 1);
     currentItems.splice(targetIndex, 0, reorderedItem);
-
-    const itemOrders = currentItems.map((item, index) => ({
-      itemId: item.id,
-      newOrder: index,
-    }));
-
+    const itemOrders = currentItems.map((item, index) => ({ itemId: item.id, newOrder: index }));
     updateItemOrder(listId, itemOrders);
   };
   
@@ -151,7 +174,8 @@ const ListDetailScreen: React.FC<ListDetailScreenProps> = ({ listId }) => {
 
   return (
     <div className="p-4 md:p-6 animate-slide-in-up">
-      <header className="flex items-center justify-between mb-4">
+       {/* Header */}
+       <header className="flex items-center justify-between mb-4">
         <div className="flex items-center">
           <button onClick={() => setCurrentPage('myLists')} className="p-2 mr-2 rounded-full hover:bg-border dark:hover:bg-dark-border">
             <ChevronLeftIcon className="w-6 h-6" />
@@ -173,7 +197,7 @@ const ListDetailScreen: React.FC<ListDetailScreenProps> = ({ listId }) => {
             )}
         </div>
       </header>
-
+      {/* Budget Panel */}
       {typeof list.listBudget === 'number' && (
         <div className="bg-card dark:bg-dark-card p-4 rounded-lg shadow-md mb-6 border border-border dark:border-dark-border">
             <div className='flex items-center justify-between mb-3'>
@@ -196,7 +220,7 @@ const ListDetailScreen: React.FC<ListDetailScreenProps> = ({ listId }) => {
             </div>
         </div>
       )}
-
+      {/* Items Header */}
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-semibold">Itens da Lista</h2>
         <div className="flex items-center gap-4">
@@ -210,7 +234,7 @@ const ListDetailScreen: React.FC<ListDetailScreenProps> = ({ listId }) => {
             </button>
         </div>
       </div>
-      
+      {/* Items List */}
       <div className="space-y-4">
         {Object.keys(groupedItems).length === 0 && (
             <p className="text-center py-8 text-foreground/60 dark:text-dark-foreground/60">
@@ -224,13 +248,7 @@ const ListDetailScreen: React.FC<ListDetailScreenProps> = ({ listId }) => {
               {items.map(item => (
                 <li 
                   key={item.id} 
-                  draggable
-                  onDragStart={() => setDraggedItem(item)}
-                  onDragEnter={(e) => { e.preventDefault(); if (draggedItem && draggedItem.id !== item.id) e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.1)'; }}
-                  onDragLeave={(e) => { e.currentTarget.style.backgroundColor = ''; }}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => { e.currentTarget.style.backgroundColor = ''; handleDrop(item); }}
-                  onDragEnd={() => setDraggedItem(null)}
+                  draggable onDragStart={() => setDraggedItem(item)} onDragEnter={(e) => { e.preventDefault(); if (draggedItem && draggedItem.id !== item.id) e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.1)'; }} onDragLeave={(e) => { e.currentTarget.style.backgroundColor = ''; }} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.currentTarget.style.backgroundColor = ''; handleDrop(item); }} onDragEnd={() => setDraggedItem(null)}
                   className={`flex items-center p-3 transition-all ${item.isPurchased ? 'opacity-40 bg-gray-50 dark:bg-gray-800/20' : ''} ${draggedItem?.id === item.id ? 'opacity-50' : ''}`}
                 >
                   <button className="cursor-grab pr-2 text-foreground/30 dark:text-dark-foreground/30"><GripVerticalIcon className="w-5 h-5"/></button>
@@ -245,7 +263,7 @@ const ListDetailScreen: React.FC<ListDetailScreenProps> = ({ listId }) => {
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => openEditModal(item)} className="p-2 rounded-full hover:bg-border dark:hover:bg-dark-border"><Edit3Icon className="w-4 h-4"/></button>
-                    <button onClick={() => removeItemFromList(listId, item.id)} className="p-2 rounded-full hover:bg-border dark:hover:bg-dark-border"><Trash2Icon className="w-4 h-4 text-red-500"/></button>
+                    <button onClick={() => setItemToDelete(item)} className="p-2 rounded-full hover:bg-border dark:hover:bg-dark-border"><Trash2Icon className="w-4 h-4 text-red-500"/></button>
                   </div>
                 </li>
               ))}
@@ -253,10 +271,20 @@ const ListDetailScreen: React.FC<ListDetailScreenProps> = ({ listId }) => {
           </div>
         ))}
       </div>
-
+      {/* Modals */}
       <Modal isOpen={isItemModalOpen} onClose={() => setItemModalOpen(false)} title={editingItem ? 'Editar Item' : 'Adicionar Item'}>
-        <div className="space-y-4">
-            <input type="text" value={itemName} onChange={e => setItemName(e.target.value)} placeholder="Nome do Item" className="w-full p-2 bg-background dark:bg-dark-background border border-border dark:border-dark-border rounded-md" />
+        <div className="space-y-4 relative">
+            <input type="text" value={itemName} onChange={handleItemNameChange} placeholder="Nome do Item" className="w-full p-2 bg-background dark:bg-dark-background border border-border dark:border-dark-border rounded-md" />
+            {autocompleteSuggestions.length > 0 && (
+                <div className="absolute w-full bg-card dark:bg-dark-card border border-border dark:border-dark-border rounded-md shadow-lg z-10 mt-1">
+                    {autocompleteSuggestions.map(s => (
+                        <div key={s.name} onClick={() => handleSuggestionClick(s)} className="p-2 cursor-pointer hover:bg-border dark:hover:bg-dark-border">
+                            <p className="font-medium">{s.name}</p>
+                            <p className="text-sm text-foreground/60 dark:text-dark-foreground/60">Último preço: R$ {s.lastPrice.toFixed(2)}</p>
+                        </div>
+                    ))}
+                </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
                 <input type="number" value={itemQuantity} onChange={e => setItemQuantity(e.target.value)} placeholder="Qtd." className="w-full p-2 bg-background dark:bg-dark-background border border-border dark:border-dark-border rounded-md" />
                 <input type="text" inputMode="decimal" value={itemPrice} onChange={e => setItemPrice(e.target.value)} placeholder="Preço Unit." className="w-full p-2 bg-background dark:bg-dark-background border border-border dark:border-dark-border rounded-md" />
@@ -270,23 +298,23 @@ const ListDetailScreen: React.FC<ListDetailScreenProps> = ({ listId }) => {
         </div>
       </Modal>
 
+      <Modal isOpen={!!itemToDelete} onClose={() => setItemToDelete(null)} title="Confirmar Exclusão">
+        <div>
+            <p>Você tem certeza que deseja excluir o item "<strong>{itemToDelete?.name}</strong>"?</p>
+            <div className="flex justify-end gap-4 mt-6">
+                <button onClick={() => setItemToDelete(null)} className="px-4 py-2 rounded-lg hover:bg-border dark:hover:bg-dark-border">Cancelar</button>
+                <button onClick={handleDeleteItemConfirmation} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700">Excluir</button>
+            </div>
+        </div>
+      </Modal>
+      
       <Modal isOpen={isBudgetModalOpen} onClose={() => setBudgetModalOpen(false)} title="Definir Orçamento da Lista">
         <div className="space-y-4">
           <div>
             <label htmlFor="listBudget" className="block text-sm font-medium mb-1">Valor do Orçamento (R$)</label>
-            <input
-              id="listBudget"
-              type="text"
-              inputMode="decimal"
-              value={budgetInput}
-              onChange={(e) => setBudgetInput(e.target.value)}
-              placeholder="Ex: 150,00"
-              className="w-full p-2 bg-background dark:bg-dark-background border border-border dark:border-dark-border rounded-md"
-            />
+            <input id="listBudget" type="text" inputMode="decimal" value={budgetInput} onChange={(e) => setBudgetInput(e.target.value)} placeholder="Ex: 150,00" className="w-full p-2 bg-background dark:bg-dark-background border border-border dark:border-dark-border rounded-md"/>
           </div>
-          <button onClick={handleBudgetFormSubmit} className="w-full mt-4 py-2 bg-primary dark:bg-primary-dark text-primary-foreground font-bold rounded-lg">
-            Salvar Orçamento
-          </button>
+          <button onClick={handleBudgetFormSubmit} className="w-full mt-4 py-2 bg-primary dark:bg-primary-dark text-primary-foreground font-bold rounded-lg">Salvar Orçamento</button>
         </div>
       </Modal>
     </div>

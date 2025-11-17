@@ -32,13 +32,12 @@ export const useStore = create<AppState>()(
 
       addList: (listData) => {
         const newList: ShoppingList = {
-          ...listData,
           id: `list_${Date.now()}`,
           createdAt: new Date().toISOString(),
           status: 'active',
           items: [],
           isPinned: false,
-          listBudget: undefined,
+          ...listData, // Use spread to include name, category, and optional listBudget
         };
         set((state) => ({ lists: [...state.lists, newList] }));
         get().setCurrentPage('listDetail', newList.id);

@@ -14,29 +14,55 @@ const statusMap: Record<ListStatus, { label: string, color: string }> = {
 const MyListsScreen: React.FC = () => {
   const { lists, setCurrentPage, addList, deleteList, duplicateList, updateList } = useStore();
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
+  const [listToDelete, setListToDelete] = useState<ShoppingList | null>(null);
   const [newListName, setNewListName] = useState('');
   const [newListCategory, setNewListCategory] = useState(LIST_CATEGORIES[0]);
+  const [newListBudget, setNewListBudget] = useState('');
   const [filter, setFilter] = useState<{ status: ListStatus | 'all', category: string }>({ status: 'active', category: 'all' });
+  const [searchQuery, setSearchQuery] = useState('');
 
   const filteredAndSortedLists = useMemo(() => {
     return lists
       .filter(list => {
         const statusMatch = filter.status === 'all' || list.status === filter.status;
         const categoryMatch = filter.category === 'all' || list.category === filter.category;
-        return statusMatch && categoryMatch;
+        const searchMatch = list.name.toLowerCase().includes(searchQuery.toLowerCase());
+        return statusMatch && categoryMatch && searchMatch;
       })
       .sort((a, b) => {
         if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       });
-  }, [lists, filter]);
+  }, [lists, filter, searchQuery]);
 
   const handleCreateList = () => {
-    if (newListName.trim()) {
-      addList({ name: newListName, category: newListCategory });
-      setNewListName('');
-      setNewListCategory(LIST_CATEGORIES[0]);
-      setCreateModalOpen(false);
+    if (!newListName.trim()) {
+      alert('Por favor, insira um nome para a lista.');
+      return;
+    }
+
+    let budget: number | undefined = undefined;
+    if (newListBudget.trim()) {
+        const parsedBudget = parseFloat(newListBudget.replace(',', '.'));
+        if (isNaN(parsedBudget) || parsedBudget < 0) {
+            alert('O valor do orçamento é inválido. Ele deve ser um número positivo.');
+            return;
+        }
+        budget = parsedBudget;
+    }
+
+    addList({ name: newListName, category: newListCategory, listBudget: budget });
+
+    setNewListName('');
+    setNewListCategory(LIST_CATEGORIES[0]);
+    setNewListBudget('');
+    setCreateModalOpen(false);
+  };
+
+  const handleDeleteConfirmation = () => {
+    if (listToDelete) {
+      deleteList(listToDelete.id);
+      setListToDelete(null);
     }
   };
 
@@ -57,18 +83,27 @@ const MyListsScreen: React.FC = () => {
         </button>
       </header>
 
-      {/* Filters */}
-      <div className="flex gap-4 mb-6">
-        <select value={filter.status} onChange={e => setFilter(f => ({...f, status: e.target.value as ListStatus | 'all'}))} className="p-2 rounded-md bg-card dark:bg-dark-card border border-border dark:border-dark-border">
-            <option value="all">Todos Status</option>
-            <option value="active">Ativas</option>
-            <option value="completed">Concluídas</option>
-            <option value="archived">Arquivadas</option>
-        </select>
-         <select value={filter.category} onChange={e => setFilter(f => ({...f, category: e.target.value}))} className="p-2 rounded-md bg-card dark:bg-dark-card border border-border dark:border-dark-border">
-            <option value="all">Todas Categorias</option>
-            {LIST_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-        </select>
+      {/* Filters & Search */}
+      <div className="flex flex-col md:flex-row gap-4 mb-6">
+        <input 
+          type="text"
+          placeholder="Buscar lista..."
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          className="flex-grow p-2 rounded-md bg-card dark:bg-dark-card border border-border dark:border-dark-border"
+        />
+        <div className="flex gap-4">
+          <select value={filter.status} onChange={e => setFilter(f => ({...f, status: e.target.value as ListStatus | 'all'}))} className="p-2 w-full rounded-md bg-card dark:bg-dark-card border border-border dark:border-dark-border">
+              <option value="all">Todos Status</option>
+              <option value="active">Ativas</option>
+              <option value="completed">Concluídas</option>
+              <option value="archived">Arquivadas</option>
+          </select>
+          <select value={filter.category} onChange={e => setFilter(f => ({...f, category: e.target.value}))} className="p-2 w-full rounded-md bg-card dark:bg-dark-card border border-border dark:border-dark-border">
+              <option value="all">Todas Categorias</option>
+              {LIST_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+          </select>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -78,14 +113,14 @@ const MyListsScreen: React.FC = () => {
             list={list} 
             total={getListTotal(list)} 
             onSelect={() => setCurrentPage('listDetail', list.id)}
-            onDelete={deleteList}
+            onDeleteRequest={() => setListToDelete(list)}
             onDuplicate={duplicateList}
             onUpdate={updateList}
           />
         ))}
         {filteredAndSortedLists.length === 0 && (
             <div className="col-span-full text-center py-10">
-                <p className="text-foreground/60 dark:text-dark-foreground/60">Nenhuma lista encontrada. Crie uma nova!</p>
+                <p className="text-foreground/60 dark:text-dark-foreground/60">{searchQuery ? 'Nenhuma lista encontrada para sua busca.' : 'Nenhuma lista encontrada. Crie uma nova!'}</p>
             </div>
         )}
       </div>
@@ -114,9 +149,32 @@ const MyListsScreen: React.FC = () => {
               {LIST_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
             </select>
           </div>
+          <div>
+            <label htmlFor="listBudget" className="block text-sm font-medium mb-1">Orçamento da Lista (Opcional)</label>
+            <input
+              id="listBudget"
+              type="text"
+              inputMode="decimal"
+              value={newListBudget}
+              onChange={(e) => setNewListBudget(e.target.value)}
+              placeholder="Ex: 150,00"
+              className="w-full p-2 bg-background dark:bg-dark-background border border-border dark:border-dark-border rounded-md"
+            />
+          </div>
           <button onClick={handleCreateList} className="w-full mt-4 py-2 bg-primary dark:bg-primary-dark text-primary-foreground font-bold rounded-lg">
             Criar Lista
           </button>
+        </div>
+      </Modal>
+      
+      <Modal isOpen={!!listToDelete} onClose={() => setListToDelete(null)} title="Confirmar Exclusão">
+        <div>
+            <p>Você tem certeza que deseja excluir a lista "<strong>{listToDelete?.name}</strong>"?</p>
+            <p className="text-sm text-red-500 mt-2">Esta ação não pode ser desfeita.</p>
+            <div className="flex justify-end gap-4 mt-6">
+                <button onClick={() => setListToDelete(null)} className="px-4 py-2 rounded-lg hover:bg-border dark:hover:bg-dark-border">Cancelar</button>
+                <button onClick={handleDeleteConfirmation} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700">Excluir</button>
+            </div>
         </div>
       </Modal>
     </div>
@@ -128,12 +186,12 @@ interface ListCardProps {
     list: ShoppingList;
     total: number;
     onSelect: () => void;
-    onDelete: (id: string) => void;
+    onDeleteRequest: () => void;
     onDuplicate: (id: string) => void;
     onUpdate: (id: string, updates: Partial<ShoppingList>) => void;
 }
 
-const ListCard: React.FC<ListCardProps> = ({ list, total, onSelect, onDelete, onDuplicate, onUpdate }) => {
+const ListCard: React.FC<ListCardProps> = ({ list, total, onSelect, onDeleteRequest, onDuplicate, onUpdate }) => {
     const [menuOpen, setMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -179,7 +237,7 @@ const ListCard: React.FC<ListCardProps> = ({ list, total, onSelect, onDelete, on
                                 <button onClick={() => handleAction(() => onUpdate(list.id, { status: 'active' }))} className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-border dark:hover:bg-dark-border"><ArchiveRestoreIcon className="w-4 h-4"/> Restaurar</button>
                             )}
                             <button onClick={() => handleAction(() => onDuplicate(list.id))} className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-border dark:hover:bg-dark-border"><CopyIcon className="w-4 h-4"/> Duplicar</button>
-                            <button onClick={() => handleAction(() => onDelete(list.id))} className="w-full text-left px-4 py-2 text-sm text-red-500 flex items-center gap-2 hover:bg-border dark:hover:bg-dark-border"><Trash2Icon className="w-4 h-4"/> Deletar</button>
+                            <button onClick={() => handleAction(onDeleteRequest)} className="w-full text-left px-4 py-2 text-sm text-red-500 flex items-center gap-2 hover:bg-border dark:hover:bg-dark-border"><Trash2Icon className="w-4 h-4"/> Deletar</button>
                         </div>
                     )}
                 </div>
