@@ -113,10 +113,12 @@ const StatisticsScreen: React.FC = () => {
         if (!selectedItemForPriceChart) return [];
         const historyEntry = priceHistory.find(h => h.itemName === selectedItemForPriceChart);
         if (!historyEntry) return [];
-        return historyEntry.prices.map(p => ({
-            date: new Date(p.date).toLocaleDateString('pt-BR'),
-            price: p.price
-        })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        return historyEntry.prices
+            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+            .map(p => ({
+                date: new Date(p.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+                price: p.price
+            }));
     }, [selectedItemForPriceChart, priceHistory]);
 
 

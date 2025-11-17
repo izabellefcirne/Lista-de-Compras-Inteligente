@@ -4,7 +4,7 @@ import { Budget } from '../types';
 import { Spinner } from '../components/Spinner';
 
 const SetBudgetScreen: React.FC = () => {
-  const { budgets, setMonthlyBudget, setCurrentPage, loadingStates } = useStore();
+  const { budgets, setMonthlyBudget, setCurrentPage, loadingStates, setError } = useStore();
   const [budget, setBudget] = useState('');
   const [currentBudget, setCurrentBudget] = useState<Budget | null>(null);
 
@@ -18,12 +18,12 @@ const SetBudgetScreen: React.FC = () => {
   }, [budgets]);
 
   const handleSetBudget = async () => {
-    const amount = parseFloat(budget);
+    const amount = parseFloat(budget.replace(',', '.'));
     if (!isNaN(amount) && amount > 0) {
       await setMonthlyBudget(amount, new Date());
       setCurrentPage('myLists');
     } else {
-      alert('Por favor, insira um valor válido para o orçamento.');
+      setError('Por favor, insira um valor válido para o orçamento.');
     }
   };
   
@@ -54,11 +54,12 @@ const SetBudgetScreen: React.FC = () => {
           <div className="relative">
             <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-foreground/50 dark:text-dark-foreground/50">R$</span>
             <input
-              type="number"
+              type="text"
+              inputMode="decimal"
               id="budget"
               value={budget}
               onChange={(e) => setBudget(e.target.value)}
-              placeholder="Ex: 500.00"
+              placeholder="Ex: 500,00"
               className="w-full pl-10 p-3 bg-background dark:bg-dark-background border border-border dark:border-dark-border rounded-md focus:ring-2 focus:ring-primary dark:focus:ring-primary-dark focus:border-transparent transition"
             />
           </div>

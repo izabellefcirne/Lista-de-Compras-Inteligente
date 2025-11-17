@@ -8,7 +8,7 @@ const mapListFromDb = (dbList: any): ShoppingList => ({
   id: dbList.id,
   createdAt: dbList.created_at,
   status: dbList.status,
-  items: dbList.items?.map(mapItemFromDb) || [],
+  items: dbList.list_items?.map(mapItemFromDb) || [],
   isPinned: dbList.is_pinned,
   name: dbList.name,
   category: dbList.category,
@@ -68,8 +68,8 @@ export const useStore = create<AppState>()((set, get) => ({
         
         try {
             const { data: listsData, error: listsError } = await supabase
-              .from('lists')
-              .select('*, items(*)')
+              .from('list')
+              .select('*, list_items(*)')
               .eq('user_id', session.user.id);
             if (listsError) throw listsError;
             set({ lists: listsData.map(mapListFromDb) });
@@ -163,7 +163,7 @@ export const useStore = create<AppState>()((set, get) => ({
             const { session } = get();
             if (!session) throw new Error("User not authenticated");
             const { data, error } = await supabase
-                .from('lists')
+                .from('list')
                 .insert({ name: listData.name, category: listData.category, list_budget: listData.listBudget, user_id: session.user.id, status: 'active', is_pinned: false })
                 .select()
                 .single();
@@ -191,7 +191,7 @@ export const useStore = create<AppState>()((set, get) => ({
             if (typeof updates.isPinned === 'boolean') dbUpdates.is_pinned = updates.isPinned;
             if (typeof updates.listBudget === 'number') dbUpdates.list_budget = updates.listBudget;
             
-            const { error } = await supabase.from('lists').update(dbUpdates).eq('id', listId);
+            const { error } = await supabase.from('list').update(dbUpdates).eq('id', listId);
             if (error) throw error;
 
             set((state) => ({ lists: state.lists.map(list => list.id === listId ? { ...list, ...updates } : list) }));
@@ -211,7 +211,7 @@ export const useStore = create<AppState>()((set, get) => ({
         const key = `deleteList-${listId}`;
         get().setLoadingState(key, true);
         try {
-            const { error } = await supabase.from('lists').delete().eq('id', listId);
+            const { error } = await supabase.from('list').delete().eq('id', listId);
             if (error) throw error;
             set((state) => ({ lists: state.lists.filter(list => list.id !== listId) }));
         } catch (error) {
@@ -232,7 +232,7 @@ export const useStore = create<AppState>()((set, get) => ({
             if (!originalList) throw new Error("Original list not found");
 
             const { data: newListData, error: newListError } = await supabase
-                .from('lists')
+                .from('list')
                 .insert({ name: `${originalList.name} (Cópia)`, category: originalList.category, list_budget: originalList.listBudget, user_id: session.user.id, status: 'active', is_pinned: false })
                 .select()
                 .single();
@@ -241,14 +241,14 @@ export const useStore = create<AppState>()((set, get) => ({
             const itemsToCopy = originalList.items.map(item => ({ name: item.name, quantity: item.quantity, unit_price: item.unitPrice, category: item.category, is_purchased: false, item_order: item.order, list_id: newListData.id, user_id: session.user.id }));
 
             if (itemsToCopy.length > 0) {
-                const { error: itemsError } = await supabase.from('items').insert(itemsToCopy);
+                const { error: itemsError } = await supabase.from('list_items').insert(itemsToCopy);
                 if (itemsError) {
-                    await supabase.from('lists').delete().eq('id', newListData.id); // Rollback
+                    await supabase.from('list').delete().eq('id', newListData.id); // Rollback
                     throw itemsError;
                 }
             }
             
-            const { data: fullNewList, error: fetchError } = await supabase.from('lists').select('*, items(*)').eq('id', newListData.id).single();
+            const { data: fullNewList, error: fetchError } = await supabase.from('list').select('*, list_items(*)').eq('id', newListData.id).single();
             if (fetchError) throw fetchError;
 
             const newList = mapListFromDb(fullNewList);
@@ -268,7 +268,7 @@ export const useStore = create<AppState>()((set, get) => ({
         try {
             const { session } = get();
             if (!session) throw new Error("User not authenticated");
-            const { data, error } = await supabase.from('items').insert({ name: itemData.name, quantity: itemData.quantity, unit_price: itemData.unitPrice, category: itemData.category, list_id: listId, user_id: session.user.id, item_order: get().lists.find(l => l.id === listId)?.items.length || 0 }).select().single();
+            const { data, error } = await supabase.from('list_items').insert({ name: itemData.name, quantity: itemData.quantity, unit_price: itemData.unitPrice, category: itemData.category, list_id: listId, user_id: session.user.id, item_order: get().lists.find(l => l.id === listId)?.items.length || 0 }).select().single();
             if (error) throw error;
 
             const newItem = mapItemFromDb(data);
@@ -292,7 +292,7 @@ export const useStore = create<AppState>()((set, get) => ({
             if (updates.category) dbUpdates.category = updates.category;
             if (typeof updates.isPurchased === 'boolean') dbUpdates.is_purchased = updates.isPurchased;
 
-            const { error } = await supabase.from('items').update(dbUpdates).eq('id', itemId);
+            const { error } = await supabase.from('list_items').update(dbUpdates).eq('id', itemId);
             if (error) throw error;
             
             set((state) => ({ lists: state.lists.map(list => list.id === listId ? { ...list, items: list.items.map(item => item.id === itemId ? { ...item, ...updates } : item) } : list) }));
@@ -308,7 +308,7 @@ export const useStore = create<AppState>()((set, get) => ({
         const key = `deleteItem-${itemId}`;
         get().setLoadingState(key, true);
         try {
-            const { error } = await supabase.from('items').delete().eq('id', itemId);
+            const { error } = await supabase.from('list_items').delete().eq('id', itemId);
             if (error) throw error;
             set((state) => ({ lists: state.lists.map(list => list.id === listId ? { ...list, items: list.items.filter(item => item.id !== itemId) } : list) }));
         } catch(error) {
@@ -337,7 +337,7 @@ export const useStore = create<AppState>()((set, get) => ({
           }));
           
           try {
-            const updates = itemOrders.map(o => supabase.from('items').update({ item_order: o.newOrder }).eq('id', o.itemId));
+            const updates = itemOrders.map(o => supabase.from('list_items').update({ item_order: o.newOrder }).eq('id', o.itemId));
             const results = await Promise.all(updates);
             const firstError = results.find(res => res.error);
             if (firstError) throw firstError.error;
@@ -360,7 +360,24 @@ export const useStore = create<AppState>()((set, get) => ({
             const { error } = await supabase.from('price_history').insert(priceUpdates);
             if (error) throw error;
             
-            get().fetchInitialData(); // Refetch to update stats
+            // OPTIMIZATION: Update state locally instead of re-fetching everything
+            set(state => {
+              const newHistory = [...state.priceHistory];
+              priceUpdates.forEach(update => {
+                  let entry = newHistory.find(h => h.itemName === update.item_name);
+                  if (entry) {
+                      entry.prices.push({ date: update.date, price: update.price });
+                  } else {
+                      newHistory.push({
+                          itemName: update.item_name,
+                          prices: [{ date: update.date, price: update.price }],
+                          user_id: update.user_id
+                      });
+                  }
+              });
+              return { priceHistory: newHistory };
+            });
+
         } catch(error) {
             console.error("Error recording price history:", error);
             // Non-critical error, no user-facing message.
