@@ -117,7 +117,7 @@ const ListDetailScreen: React.FC<{ listId: string }> = ({ listId }) => {
     setAutocompleteSuggestions([]);
   };
   
-  const handleItemFormSubmit = () => {
+  const handleItemFormSubmit = async () => {
     if (!itemName.trim() || !itemQuantity.trim()) { alert("Por favor, preencha o nome e a quantidade do item."); return; }
     const quantity = parseInt(itemQuantity, 10);
     if (isNaN(quantity) || quantity <= 0) { alert("A quantidade deve ser um número maior que zero."); return; }
@@ -129,33 +129,33 @@ const ListDetailScreen: React.FC<{ listId: string }> = ({ listId }) => {
     }
 
     if (editingItem) {
-      updateItemInList(listId, editingItem.id, { name: itemName, quantity, unitPrice: price, category: itemCategory });
+      await updateItemInList(listId, editingItem.id, { name: itemName, quantity, unitPrice: price, category: itemCategory });
     } else {
-      addItemToList(listId, { name: itemName, quantity, unitPrice: price, category: itemCategory });
+      await addItemToList(listId, { name: itemName, quantity, unitPrice: price, category: itemCategory });
     }
     setItemModalOpen(false);
     resetForm();
   };
   
-  const handleDeleteItemConfirmation = () => {
+  const handleDeleteItemConfirmation = async () => {
     if (itemToDelete) {
-      removeItemFromList(listId, itemToDelete.id);
+      await removeItemFromList(listId, itemToDelete.id);
       setItemToDelete(null);
     }
   };
 
-  const handleBudgetFormSubmit = () => {
+  const handleBudgetFormSubmit = async () => {
     const amount = parseFloat(budgetInput.replace(',', '.'));
     if (!isNaN(amount) && amount >= 0) {
-      updateList(listId, { listBudget: amount });
+      await updateList(listId, { listBudget: amount });
       setBudgetModalOpen(false);
     } else {
       alert('Por favor, insira um valor de orçamento válido.');
     }
   };
   
-  const handleFinalizeList = () => {
-    updateList(listId, { status: 'completed' });
+  const handleFinalizeList = async () => {
+    await updateList(listId, { status: 'completed' });
     setCurrentPage('myLists');
   };
 

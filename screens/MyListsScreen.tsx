@@ -35,7 +35,7 @@ const MyListsScreen: React.FC = () => {
       });
   }, [lists, filter, searchQuery]);
 
-  const handleCreateList = () => {
+  const handleCreateList = async () => {
     if (!newListName.trim()) {
       alert('Por favor, insira um nome para a lista.');
       return;
@@ -51,7 +51,7 @@ const MyListsScreen: React.FC = () => {
         budget = parsedBudget;
     }
 
-    addList({ name: newListName, category: newListCategory, listBudget: budget });
+    await addList({ name: newListName, category: newListCategory, listBudget: budget });
 
     setNewListName('');
     setNewListCategory(LIST_CATEGORIES[0]);
@@ -59,9 +59,9 @@ const MyListsScreen: React.FC = () => {
     setCreateModalOpen(false);
   };
 
-  const handleDeleteConfirmation = () => {
+  const handleDeleteConfirmation = async () => {
     if (listToDelete) {
-      deleteList(listToDelete.id);
+      await deleteList(listToDelete.id);
       setListToDelete(null);
     }
   };

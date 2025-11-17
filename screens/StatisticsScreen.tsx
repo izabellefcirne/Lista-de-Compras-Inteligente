@@ -5,6 +5,9 @@ import { DollarSignIcon, ShoppingCartIcon, TagIcon, PackageIcon, BarChart3Icon, 
 import ProgressBar from '../components/ProgressBar';
 import { ListItem } from '../types';
 
+// FIX: Define a type for product statistics to ensure type safety in calculations.
+type ProductStat = { name: string; quantity: number; totalSpent: number; prices: number[]; };
+
 const StatisticsScreen: React.FC = () => {
     const { lists, priceHistory, budgets } = useStore();
     const [selectedItemForPriceChart, setSelectedItemForPriceChart] = useState<string | null>(null);
@@ -46,11 +49,12 @@ const StatisticsScreen: React.FC = () => {
             acc[itemName].totalSpent += totalItemCost;
             acc[itemName].prices.push(item.unitPrice);
             return acc;
-        }, {} as Record<string, { name: string, quantity: number, totalSpent: number, prices: number[] }>);
+        }, {} as Record<string, ProductStat>);
     }, [allCompletedItems]);
 
     const dashboardStats = useMemo(() => {
-        const productStatsValues = Object.values(productStatsMemo);
+        // FIX: Explicitly type productStatsValues to resolve type inference issues.
+        const productStatsValues: ProductStat[] = Object.values(productStatsMemo);
 
         const categorySpending = allCompletedItems.reduce((acc, item) => {
             const total = item.unitPrice * item.quantity;
@@ -71,7 +75,8 @@ const StatisticsScreen: React.FC = () => {
     }, [allCompletedItems, completedLists, productStatsMemo]);
     
     const productDetails = useMemo(() => {
-        const productStatsValues = Object.values(productStatsMemo);
+        // FIX: Explicitly type productStatsValues to resolve type inference issues.
+        const productStatsValues: ProductStat[] = Object.values(productStatsMemo);
         return productStatsValues.map(p => ({
             ...p,
             avgPrice: p.prices.length > 0 ? p.prices.reduce((a, b) => a + b, 0) / p.prices.length : 0,
